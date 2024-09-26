@@ -115,7 +115,8 @@ class Controller():
 
         # Get class from yolo output for adding to stored classes list
         elif len(self.stored_class_names) < 9:
-            preds = yolo_output.boxes.data.numpy()  # List of (bouding_box, conf, class_id)
+            #preds = yolo_output.boxes.data.numpy()  # List of (bouding_box, conf, class_id)
+            preds = yolo_output.boxes.data.cpu().numpy()
 
             for pred in preds:
                 class_id = int(pred[-1])
@@ -158,105 +159,104 @@ class Controller():
         if self.turning_counter < MAX_COUNTER:
             print('Turning Counter:', self.turning_counter)
 
-            match self.majority_class:
-                case 'turn_left':
-                    if self.is_turn_left_case_1:
-                        speed = -1
-                        if self.turning_counter <= 18: # Hard
-                            angle = 1
-                        elif self.turning_counter > 18 and self.turning_counter <= 31:
-                            angle = self.angle_turning
-                        else:
-                            self.turning_counter = MAX_COUNTER
-                    elif self.is_turn_left_case_2:
-                        speed = -2
-                        if self.turning_counter <= 17:
-                            angle = -1
-                        elif self.turning_counter > 17 and self.turning_counter <= 35:
-                            angle = self.angle_turning
-                        else:
-                            self.turning_counter = MAX_COUNTER
-
-                case 'turn_right':
-                    speed = -5
-                    if self.turning_counter <= 8:
-                        angle = 2
-                    elif self.turning_counter > 8 and self.turning_counter < 26:
-                        angle = self.angle_turning
-                    else:
-                        self.turning_counter = MAX_COUNTER
-
-                case 'no_turn_left':
-                    speed = -3
-                    if self.turning_counter <= 9:
-                        angle = 2
-                    elif self.turning_counter > 9 and self.turning_counter <= 28:
-                        angle = -33
-                    else:
-                        self.turning_counter = MAX_COUNTER
-                        
-                case 'no_turn_right':
-                    if self.is_no_turn_right_case_1:    # Left hard
-                        speed = -2
-                        if self.turning_counter <= 17:
-                            angle = 5
-                        elif self.turning_counter > 17 and self.turning_counter <= 27:
-                            angle = self.angle_turning
-                        else:
-                            self.turning_counter = MAX_COUNTER
-                    elif self.is_no_turn_right_case_2:  # Left
-                        speed = -2
-                        if self.turning_counter <= 13:
-                            angle = -1
-                        elif self.turning_counter > 13 and self.turning_counter <= 30:
-                            angle = self.angle_turning
-                        else:
-                            self.turning_counter = MAX_COUNTER
-                    elif self.is_no_turn_right_case_3: # Straight (left of map)
-                        speed = -2
-                        if self.turning_counter <= 8:
-                            angle = 0
-                        elif self.turning_counter > 8 and self.turning_counter <= 15:
-                            angle = self.angle_turning
-                        else:
-                            self.turning_counter = MAX_COUNTER
-                    else:   # Straight: self.is_no_turn_right_case_4
-                        speed = -1
-                        if self.turning_counter <= 13:
-                            angle = 0
-                        # elif self.turning_counter > 8 and self.turning_counter <= 15:
-                        #     angle = self.angle_turning
-                        else:
-                            self.turning_counter = MAX_COUNTER
-
-                case 'straight':
+            if self.majority_class == 'turn_left':
+                if self.is_turn_left_case_1:
                     speed = -1
-                    if self.turning_counter <= 25:
+                    if self.turning_counter <= 18: # Hard
+                        angle = 1
+                    elif self.turning_counter > 18 and self.turning_counter <= 31:
+                        angle = self.angle_turning
+                    else:
+                        self.turning_counter = MAX_COUNTER
+                elif self.is_turn_left_case_2:
+                    speed = -2
+                    if self.turning_counter <= 17:
+                        angle = -1
+                    elif self.turning_counter > 17 and self.turning_counter <= 35:
                         angle = self.angle_turning
                     else:
                         self.turning_counter = MAX_COUNTER
 
-                case 'no_straight':
-                    if self.is_turn_left: # Left
-                        speed = -2
-                        if self.turning_counter <= 17:
-                            angle = 0
-                        elif self.turning_counter > 17 and self.turning_counter <= 35:
-                            angle = self.angle_turning
-                        else:
-                            self.turning_counter = MAX_COUNTER
-                    else: # Right
-                        speed = -4
-                        if self.turning_counter <= 9:
-                            angle = 0
-                        elif self.turning_counter > 9 and self.turning_counter <= 25:
-                            angle = self.angle_turning
-                        else:
-                            self.turning_counter = MAX_COUNTER
+            elif self.majority_class == 'turn_right':
+                speed = -5
+                if self.turning_counter <= 8:
+                    angle = 2
+                elif self.turning_counter > 8 and self.turning_counter < 26:
+                    angle = self.angle_turning
+                else:
+                    self.turning_counter = MAX_COUNTER
+
+            elif self.majority_class == 'no_turn_left':
+                speed = -3
+                if self.turning_counter <= 9:
+                    angle = 2
+                elif self.turning_counter > 9 and self.turning_counter <= 28:
+                    angle = -33
+                else:
+                    self.turning_counter = MAX_COUNTER
+                    
+            elif self.majority_class == 'no_turn_right':
+                if self.is_no_turn_right_case_1:    # Left hard
+                    speed = -2
+                    if self.turning_counter <= 17:
+                        angle = 5
+                    elif self.turning_counter > 17 and self.turning_counter <= 27:
+                        angle = self.angle_turning
+                    else:
+                        self.turning_counter = MAX_COUNTER
+                elif self.is_no_turn_right_case_2:  # Left
+                    speed = -2
+                    if self.turning_counter <= 13:
+                        angle = -1
+                    elif self.turning_counter > 13 and self.turning_counter <= 30:
+                        angle = self.angle_turning
+                    else:
+                        self.turning_counter = MAX_COUNTER
+                elif self.is_no_turn_right_case_3: # Straight (left of map)
+                    speed = -2
+                    if self.turning_counter <= 8:
+                        angle = 0
+                    elif self.turning_counter > 8 and self.turning_counter <= 15:
+                        angle = self.angle_turning
+                    else:
+                        self.turning_counter = MAX_COUNTER
+                else:   # Straight: self.is_no_turn_right_case_4
+                    speed = -1
+                    if self.turning_counter <= 13:
+                        angle = 0
+                    # elif self.turning_counter > 8 and self.turning_counter <= 15:
+                    #     angle = self.angle_turning
+                    else:
+                        self.turning_counter = MAX_COUNTER
+
+            elif self.majority_class == 'straight':
+                speed = -1
+                if self.turning_counter <= 25:
+                    angle = self.angle_turning
+                else:
+                    self.turning_counter = MAX_COUNTER
+
+            elif self.majority_class == 'no_straight':
+                if self.is_turn_left: # Left
+                    speed = -2
+                    if self.turning_counter <= 17:
+                        angle = 0
+                    elif self.turning_counter > 17 and self.turning_counter <= 35:
+                        angle = self.angle_turning
+                    else:
+                        self.turning_counter = MAX_COUNTER
+                else: # Right
+                    speed = -4
+                    if self.turning_counter <= 9:
+                        angle = 0
+                    elif self.turning_counter > 9 and self.turning_counter <= 25:
+                        angle = self.angle_turning
+                    else:
+                        self.turning_counter = MAX_COUNTER
                             
             # Set default speed
             if speed == 0:
-                speed = 70
+                speed = 50
 
             # Set send back values
             self.sendBack_angle = angle
@@ -377,6 +377,13 @@ class Controller():
 
             # Set angle and error turning
             self.angle_turning = angle
+        if areas > 600.0 and self.majority_class == '':
+            # Set angle and error turning
+            self.angle_turning = 0
+
+            # Start turning and stop cal areas
+            self.is_turning = True
+            self.start_cal_area = False
 
     def calc_areas(self, segmented_image, yolo_output):
         # Testing
@@ -469,7 +476,7 @@ class Controller():
         The speed of the car.
         """
         if abs(angle) < 10:
-            speed = 70
+            speed = 50
         elif 10 <= abs(angle) <= 20:
             speed = 1
         else:
