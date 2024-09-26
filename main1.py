@@ -1,4 +1,4 @@
-from client_lib import GetStatus,GetRaw,GetSeg,AVControl,CloseSocket
+from CEEC_Library import GetStatus,GetRaw,GetSeg,AVControl,CloseSocket
 import cv2
 import numpy as np
 import time
@@ -63,7 +63,7 @@ if __name__ == "__main__":
                 sendBack_angle (steering angle)
                 sendBack_Speed (speed control)
             """
-                
+            
             # try:
             #     # Send signal to the server.
             #     message_getState = bytes("0", "utf-8")
@@ -103,7 +103,14 @@ if __name__ == "__main__":
             try:
                 # Decode image in byte type recieved from server
                 image = GetRaw()
-                
+                # image_rgb = cv2.cvtColor(GetSeg(), cv2.COLOR_BGR2RGB)
+                # lower_purple = np.array([170, 15, 240], dtype=np.uint8)
+                # upper_purple = np.array([190, 25, 255], dtype=np.uint8)
+                # mask = cv2.inRange(image_rgb, lower_purple, upper_purple)
+                # pink_color = [200, 10, 100]
+                # image_rgb[mask != 0] = pink_color
+                # image_bgr = cv2.cvtColor(image_rgb, cv2.COLOR_RGB2BGR)
+                # segmented_image = image_bgr
                 # ============================================================ PIDNet
                 segmented_image = land_detector.reference(
                     image, config_model.segmented_output_size, mask_lr, mask_l, mask_r, mask_t)
@@ -119,11 +126,9 @@ if __name__ == "__main__":
                 # ============================================================ Controller
                 angle, speed, next_step, mask_l, mask_r = controller.control(segmented_image=segmented_image,
                                                                              yolo_output=yolo_output)
-                
-                
+
                 # Control when turing
                 if next_step:
-                    #AVControl(speed = speed, angle = -angle)
                     print("Next step")
                     print("Angle:", angle)
                     print("Speed:", speed)
@@ -135,7 +140,6 @@ if __name__ == "__main__":
                 else:
                     error = controller.calc_error(segmented_image)
                     angle = controller.PID(error, p=0.2, i=0.0, d=0.02)
-                    #AVControl(speed = speed, angle = -angle)
                     # Speed up after turning (in 35 frames)
                     if reset_counter >= 1 and reset_counter < 35:
                         speed = 50
