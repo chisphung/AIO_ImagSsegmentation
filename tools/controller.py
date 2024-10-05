@@ -253,10 +253,9 @@ class Controller():
                         angle = self.angle_turning
                     else:
                         self.turning_counter = MAX_COUNTER
-                            
             # Set default speed
             if speed == 0:
-                speed = 50
+                speed = 30
 
             # Set send back values
             self.sendBack_angle = angle
@@ -390,8 +389,8 @@ class Controller():
         print("Calculating areas!")
         print("Majority class:", self.majority_class)
 
-        preds = yolo_output.boxes.data.numpy()  # List of (bouding_box, conf, class_id)
-
+        #preds = yolo_output.boxes.data.numpy()  # List of (bouding_box, conf, class_id)
+        preds = yolo_output.boxes.data.cpu().numpy()
         try:
             for pred in preds:
                 class_id = int(pred[-1])
@@ -425,12 +424,14 @@ class Controller():
         """
 
         arr = []
-        height = 12
+        height = 60
+        #height = 40
         lineRow = image[height, :]
         for x, y in enumerate(lineRow):
             if y[0] == 100:
                 arr.append(x)
-
+        if(max(arr) - min(arr) > 140):
+            return -1
         if len(arr) > 0:
             center_right_lane = int((min(arr) + max(arr)*2.5)/3.5)
             error = int(image.shape[1]/2) - center_right_lane
@@ -451,6 +452,8 @@ class Controller():
         Returns:
         The PID output.
         """
+        if error == -1:
+             return 0
         self.error_arr[1:] = self.error_arr[0:-1]
         self.error_arr[0] = error
         P = error*p
@@ -476,7 +479,7 @@ class Controller():
         The speed of the car.
         """
         if abs(angle) < 10:
-            speed = 50
+            speed = 30
         elif 10 <= abs(angle) <= 20:
             speed = 1
         else:
