@@ -11,7 +11,7 @@ from tools.custom import LandDetect
 from tools.controller1 import Controller
 from utils.config import ModelConfig, ControlConfig
 from utils.socket import create_socket
-from tools.ChienSegmentation import myGetSegment, filter_masks_by_confidence
+from tools.chienSegmentation import myGetSegment, filter_masks_by_confidence
 
 if __name__ == "__main__":
     # Create socket
@@ -85,7 +85,17 @@ if __name__ == "__main__":
                 #segmented_image = cv2.cvtColor(segmented_image, cv2.COLOR_BGR2RGB)
                 # ============================================================ YOLO
                 # Resize the image to the desired dimensions
+
+                img = GetRaw()
+                  # Get YOLO model output
+                segmented_image = myGetSegment(img, yolo)
+                # Debugging: Print out bounding boxes and classes
+                segmented_image = cv2.resize(segmented_image, (320, 180))
                 
+
+
+                #print(yolo.get('cls'))
+
 
                 # with torch.no_grad():
                 #     yolo_output = yolo(image)[0]
@@ -94,28 +104,13 @@ if __name__ == "__main__":
                 # angle, speed, next_step, mask_l, mask_r = controller.control(segmented_image=segmented_image,
                 #                                                             yolo_output=yolo_output)
 
-                # Control when turining
-                # if next_step:
-                #     print("Next step")
-                #     print("Angle:", angle)
-                #     print("Speed:", speed)
-                #     config_control.update(-angle, speed)
 
-                #     reset_counter = 1
+                #use segmentation
+                # segmented_image = GetSeg()
+                # segmented_image = cv2.cvtColor(segmented_image, cv2.COLOR_BGR2GRAY)
+                # segmented_image = (segmented_image*(255/np.max(segmented_image))).astype(np.uint8)
 
-                # # Default control
-                # else:
-                # img = GetRaw()
-                # # with torch.no_grad():
-                # #      yolo_output = yolo(img)[0]
-                # segmented_image = yolo(img)[0]
-                # for i, mask in enumerate(segmented_image['masks']):
-                #     mask_np = mask.cpu().numpy() * 255
-                #     mask_image = np.uint8(mask_np)
-                #     img = cv2.bitwise_and(img, img, mask=mask_image)
-                segmented_image = GetSeg()
-                segmented_image = cv2.cvtColor(GetSeg(), cv2.COLOR_BGR2GRAY)
-                segmented_image = (segmented_image*(255/np.max(segmented_image))).astype(np.uint8)
+
                 if True:
                     error = controller.calc_error(segmented_image)
                     angle = controller.PID(error, p=0.2, i=0.0, d=0.02)
@@ -147,7 +142,7 @@ if __name__ == "__main__":
                 #yolo_output = yolo_output.plot()
                 #segmented_image = segmented_image.plot()
                 # if config_model.view_seg:
-                #     cv2.imshow("segmented image", segmented_image)
+                    #  cv2.imshow("segmented image", segmented_image)
                 cv2.imshow("segmented image", segmented_image)
                 # if config_model.view_first_view:
                 #     cv2.imshow("first view image", yolo_output)
