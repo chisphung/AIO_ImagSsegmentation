@@ -103,20 +103,23 @@ class Controller():
         arr = []
         # height = 60
         #height = 40
-        height = 122
+        height = 121
+        #height = 130
         lineRow = image[height, :]
         for x, y in enumerate(lineRow):
             if y == 255:
                 arr.append(x)
                 #print(x)
-        if(max(arr) - min(arr) > 210):
-            return -1
+        if(max(arr) - min(arr) > 225):
+        #if(max(arr) - min(arr) > 230):
+            return 0
         if len(arr) > 0:
             center_right_lane = int((min(arr) + max(arr)*2.5)/3.5)
             error = int(image.shape[1]/2) - center_right_lane
             return error*1.3
         else:
             return 0
+
 
     def PID(self, error, p, i, d):
         """
@@ -131,8 +134,8 @@ class Controller():
         Returns:
         The PID output.
         """
-        if error == -1:
-             return 0
+        # if error == -1:
+        #      return 0
         self.error_arr[1:] = self.error_arr[0:-1]
         self.error_arr[0] = error
         P = error*p
@@ -147,6 +150,8 @@ class Controller():
 
         return int(angle)
 
+
+
     def calc_speed(self, angle):
         """
         Calculates the speed of the car based on the steering angle.
@@ -158,9 +163,14 @@ class Controller():
         The speed of the car.
         """
         if abs(angle) < 10:
-            speed = 50
-        elif 10 <= abs(angle) <= 20:
+            speed = 90
+        elif 10 <= abs(angle) <= 15:
+            speed = 5
+        elif 15 < abs(angle) <= 20:
             speed = 1
+        elif 20 < abs(angle) <= 25:
+            speed = -1
         else:
             speed = 1
         return speed
+

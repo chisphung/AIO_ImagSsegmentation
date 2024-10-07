@@ -70,51 +70,25 @@ if __name__ == "__main__":
 
 
             try:
-                # Decode image in byte type recieved from server
-                # image = GetRaw()
-                # image = cv2.resize(image, (640, 384))
-                # ============================================================ PIDNet
-                # image_filename = os.path.join(image_save_folder, f"image_{image_counter:04d}.jpg")
-                # cv2.imwrite(image_filename, image)
-                # print(f"Saved image: {image_filename}")
-                # image_counter += 1
-                
-                # segmented_image = land_detector.reference(
-                #     image, config_model.segmented_output_size, mask_lr, mask_l, mask_r, mask_t)
-                # #segmented_image = GetSeg()
-                #segmented_image = cv2.cvtColor(segmented_image, cv2.COLOR_BGR2RGB)
-                # ============================================================ YOLO
-                # Resize the image to the desired dimensions
+                # =============Use our segmentation============
 
-                img = GetRaw()
-                  # Get YOLO model output
-                segmented_image = myGetSegment(img, yolo)
-                # Debugging: Print out bounding boxes and classes
-                segmented_image = cv2.resize(segmented_image, (320, 180))
-                
+                # img = GetRaw()
+                #   # Get YOLO model output
+                # segmented_image = myGetSegment(img, yolo)
+                # # Debugging: Print out bounding boxes and classes
+                # segmented_image = cv2.resize(segmented_image, (320, 180))
+                # #segmented_image = segmented_image[5:6, 312:174]
 
-
-                #print(yolo.get('cls'))
-
-
-                # with torch.no_grad():
-                #     yolo_output = yolo(image)[0]
-
-                # ============================================================ Controller
-                # angle, speed, next_step, mask_l, mask_r = controller.control(segmented_image=segmented_image,
-                #                                                             yolo_output=yolo_output)
-
-
-                #use segmentation
-                # segmented_image = GetSeg()
-                # segmented_image = cv2.cvtColor(segmented_image, cv2.COLOR_BGR2GRAY)
-                # segmented_image = (segmented_image*(255/np.max(segmented_image))).astype(np.uint8)
+                # =============Use BTC segmentation============
+                segmented_image = GetSeg()
+                segmented_image = cv2.cvtColor(segmented_image, cv2.COLOR_BGR2GRAY)
+                segmented_image = (segmented_image*(255/np.max(segmented_image))).astype(np.uint8)
 
 
                 if True:
                     error = controller.calc_error(segmented_image)
                     angle = controller.PID(error, p=0.2, i=0.0, d=0.02)
-                    # Speed up after turning (in 35 frames)
+                    #Speed up after turning (in 35 frames)
                     if reset_counter >= 1 and reset_counter < 35:
                         speed = 50
                         reset_counter += 1
@@ -130,19 +104,9 @@ if __name__ == "__main__":
                     print("Error:", error)
                     print("Angle:", angle)
                     print("Speed:", speed)
-
                     config_control.update(-angle, speed)
                 
                 AVControl(speed = speed, angle = -angle)
-                # # ============================================================ Show image
-                # Resize image if it's too small for you to see
-                #segmented_image = cv2.resize(segmented_image, (336, 200), interpolation=cv2.INTER_NEAREST)
-
-                
-                #yolo_output = yolo_output.plot()
-                #segmented_image = segmented_image.plot()
-                # if config_model.view_seg:
-                    #  cv2.imshow("segmented image", segmented_image)
                 cv2.imshow("segmented image", segmented_image)
                 # if config_model.view_first_view:
                 #     cv2.imshow("first view image", yolo_output)
