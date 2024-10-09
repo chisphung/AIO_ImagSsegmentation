@@ -72,17 +72,17 @@ if __name__ == "__main__":
             try:
                 # =============Use our segmentation============
 
-                # img = GetRaw()
-                #   # Get YOLO model output
-                # segmented_image = myGetSegment(img, yolo)
-                # # Debugging: Print out bounding boxes and classes
-                # segmented_image = cv2.resize(segmented_image, (320, 180))
-                # #segmented_image = segmented_image[5:6, 312:174]
+                img = GetRaw()
+                  # Get YOLO model output
+                segmented_image = myGetSegment(img, yolo)
+                # Debugging: Print out bounding boxes and classes
+                segmented_image = cv2.resize(segmented_image, (320, 180))
+                #segmented_image = segmented_image[5:6, 312:174]
 
                 # =============Use BTC segmentation============
-                segmented_image = GetSeg()
-                segmented_image = cv2.cvtColor(segmented_image, cv2.COLOR_BGR2GRAY)
-                segmented_image = (segmented_image*(255/np.max(segmented_image))).astype(np.uint8)
+                # segmented_image = GetSeg()
+                # segmented_image = cv2.cvtColor(segmented_image, cv2.COLOR_BGR2GRAY)
+                # segmented_image = (segmented_image*(255/np.max(segmented_image))).astype(np.uint8)
 
 
                 if True:
@@ -107,6 +107,7 @@ if __name__ == "__main__":
                     config_control.update(-angle, speed)
                 
                 AVControl(speed = speed, angle = -angle)
+                cv2.imshow("raw image", img)
                 cv2.imshow("segmented image", segmented_image)
                 # if config_model.view_first_view:
                 #     cv2.imshow("first view image", yolo_output)

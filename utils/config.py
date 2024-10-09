@@ -1,7 +1,7 @@
 class ModelConfig:
     def __init__(self):
         # self.weights_yolo = 'pretrain/yolov8-best.pt'
-        self.weights_yolo = 'pretrain/PIDNet-chien.pt'
+        self.weights_yolo = 'pretrain/PIDNet-chien2.pt'
         self.weights_lane = 'pretrain/PIDNet.pt'
 
         self.img_size = 640
