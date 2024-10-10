@@ -1,6 +1,6 @@
 import numpy as np
 import time
-
+import cv2
 from utils.utils import find_majority
 
 
@@ -89,7 +89,15 @@ class Controller():
 
         self.is_turn_left_case_1 = False
 
-    def calc_error(self, image):
+
+    # def showLine(self, image, height, height1):
+    #     img = image.copy()
+    #     img = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
+    #     cv2.line(img, (0, height), (img.shape[1], height), (255, 0, 0), 1)
+    #     cv2.line(img, (0, height1), (img.shape[1], height1), (255, 0, 0), 1)
+    #     cv2.imshow("line", img)
+
+    def calc_error(self, image, height):
         """
         Calculates the error between the center of the right lane and the center of the image.
 
@@ -103,20 +111,33 @@ class Controller():
         arr = []
         # height = 60
         #height = 40
-        height = 110
-        #height = 130
+        #height = 113
+        # height = 
+    
+        #self.showLine(image, height, height)
+        
         lineRow = image[height, :]
+        flag = -1
         try:
             for x, y in enumerate(lineRow):
                 if y == 255:
-                    arr.append(x)
-                    #print(x)
-            if(max(arr) - min(arr) > 210):
-            #if(max(arr) - min(arr) > 230):
-                return 0
+                    flag = x  
+                    break          
+            if flag != -1:
+                for x in range(flag, len(lineRow)):
+                    if lineRow[x] == 255:
+                        arr.append(x)  # Append x to arr for consecutive '255'
+                    else:
+                        break  # Stop when a '0' (non-white) pixel is found
+            # print("min", min(arr))
+            # print("max", max(arr))
+            if(max(arr) - min(arr) > 200 and min(arr) < 150):
+                print("Intersection detected")
+                return -1
+            # #if(max(arr) - min(arr) > 230):
+            #     return 0
             if len(arr) > 0:
-                center_right_lane = int((min(arr) + max(arr)*2.5)/3.5) - 11
-                print("center_right_lane: ", center_right_lane)
+                center_right_lane = int((min(arr) + max(arr)*2.5)/3.5) - 10
                 error = int(image.shape[1]/2) - center_right_lane
                 return error*1.3
             else:
@@ -138,8 +159,8 @@ class Controller():
         Returns:
         The PID output.
         """
-        # if error == -1:
-        #      return 0
+        if error == -1:
+              error = 0
         self.error_arr[1:] = self.error_arr[0:-1]
         self.error_arr[0] = error
         P = error*p
@@ -168,12 +189,12 @@ class Controller():
         """
         if abs(angle) < 10:
             speed = 70
-        elif 10 <= abs(angle) <= 15:
+        elif 10 <= abs(angle) <= 18:
             speed = 1
-        elif 15 < abs(angle) <= 20:
-            speed = 1
+        elif 18 < abs(angle) <= 20:
+            speed = 0
         elif 20 < abs(angle) <= 25:
-            speed = -1
+            speed = -5
         else:
             speed = -1
         return speed

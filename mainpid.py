@@ -29,12 +29,13 @@ if __name__ == "__main__":
 
     # Load YOLOv8
     yolo = YOLO(config_model.weights_yolo)
+    print("READY: YOLO loaded")
 
     # Load PIDNet
-    image_save_folder = "training_images"
-    if not os.path.exists(image_save_folder):
-        os.makedirs(image_save_folder)
-    image_counter = 0
+    # image_save_folder = "training_images"
+    # if not os.path.exists(image_save_folder):
+    #     os.makedirs(image_save_folder)
+    # image_counter = 0
 
     #land_detector = LandDetect('pidnet-s', os.path.join(config_model.weights_lane))
     try:
@@ -86,9 +87,11 @@ if __name__ == "__main__":
 
 
                 if True:
-                    error = controller.calc_error(segmented_image)
+                    error = controller.calc_error(segmented_image, height= 107)
+                    
                     angle = controller.PID(error, p=0.2, i=0.0, d=0.02)
                     #Speed up after turning (in 35 frames)
+
                     if reset_counter >= 1 and reset_counter < 35:
                         speed = 50
                         reset_counter += 1
@@ -96,10 +99,15 @@ if __name__ == "__main__":
                         reset_counter = 0
                         speed = 50 
                     else:
-                        speed = controller.calc_speed(angle)
+                        if (error == -1):
+                            speed = 30
+                        # elif (forsee_angle >20 ):
+                        #     speed = 10
+                        else:
+                            speed = controller.calc_speed(angle)
 
-                        if float(config_control.current_speed) > 44.5:
-                            speed = 15
+                            if float(config_control.current_speed) > 44.5:
+                                speed = 15
 
                     print("Error:", error)
                     print("Angle:", angle)
@@ -107,7 +115,7 @@ if __name__ == "__main__":
                     config_control.update(-angle, speed)
                 
                 AVControl(speed = speed, angle = -angle)
-                cv2.imshow("raw image", img)
+                #cv2.imshow("raw image", img)
                 cv2.imshow("segmented image", segmented_image)
                 # if config_model.view_first_view:
                 #     cv2.imshow("first view image", yolo_output)
