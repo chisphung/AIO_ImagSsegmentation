@@ -188,7 +188,7 @@ class Controller():
         The speed of the car.
         """
         if abs(angle) < 10:
-            speed = 70
+            speed = 50
         elif 10 <= abs(angle) <= 18:
             speed = 1
         elif 18 < abs(angle) <= 20:

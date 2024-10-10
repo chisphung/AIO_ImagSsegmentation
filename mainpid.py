@@ -17,9 +17,9 @@ if __name__ == "__main__":
     # Create socket
     # Config model
     config_model = ModelConfig()
-    device = torch.device('cuda')
-    # device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    half = device.type != 'cpu'
+    # device = torch.device('cuda')
+    # # device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    # half = device.type != 'cpu'
 
     # Config control
     config_control = ControlConfig()
@@ -29,7 +29,7 @@ if __name__ == "__main__":
 
     # Load YOLOv8
     yolo = YOLO(config_model.weights_yolo)
-    print("READY: YOLO loaded")
+    print("READY: YOLO loaded nhung ma please for the first frame to be processed")
 
     # Load PIDNet
     # image_save_folder = "training_images"
@@ -73,7 +73,7 @@ if __name__ == "__main__":
             try:
                 # =============Use our segmentation============
 
-                img = GetRaw()
+                img = GetRaw() 
                   # Get YOLO model output
                 segmented_image = myGetSegment(img, yolo)
                 # Debugging: Print out bounding boxes and classes
@@ -87,9 +87,9 @@ if __name__ == "__main__":
 
 
                 if True:
-                    error = controller.calc_error(segmented_image, height= 107)
+                    error = controller.calc_error(segmented_image, height= 108)
                     
-                    angle = controller.PID(error, p=0.2, i=0.0, d=0.02)
+                    angle = controller.PID(error, p=0.2,  i=0.0, d=0.05)
                     #Speed up after turning (in 35 frames)
 
                     if reset_counter >= 1 and reset_counter < 35:
