@@ -96,7 +96,45 @@ class Controller():
     #     cv2.line(img, (0, height), (img.shape[1], height), (255, 0, 0), 1)
     #     cv2.line(img, (0, height1), (img.shape[1], height1), (255, 0, 0), 1)
     #     cv2.imshow("line", img)
+    def verify_intersection(self, image, height):
+        arr = []
+        lineRow = image[height, :]
+        for x,y in enumerate(lineRow):
+            if(y == 255):
+                arr.append(x)
+        if(max(arr) - min(arr) > 30):
+            return True
+        return False
+    
+    def find_longest_lane_segment(self, line):
+        max_length = 0
+        current_length = 0
+        start_index = 0
+        best_start_index = 0
 
+        for x, y in enumerate(line):
+            if y == 255:  # If we find a white pixel (lane part)
+                current_length += 1
+                if current_length == 1:  # Mark the start of the sequence
+                    start_index = x
+            else:
+                if current_length > max_length:  # End of the sequence, check if it's the longest
+                    max_length = current_length
+                    best_start_index = start_index
+                current_length = 0  # Reset for the next sequence
+        
+        # Check the last sequence in case it is the longest
+        if current_length > max_length:
+            max_length = current_length
+            best_start_index = start_index
+        
+        # Return the x-positions of the longest segment
+        if max_length > 0:
+            return np.arange(best_start_index, best_start_index + max_length)
+        else:
+            return np.array([]) 
+
+    
     def calc_error(self, image, height):
         """
         Calculates the error between the center of the right lane and the center of the image.
@@ -119,23 +157,27 @@ class Controller():
         lineRow = image[height, :]
         flag = -1
         try:
-            for x, y in enumerate(lineRow):
-                if y == 255:
-                    flag = x  
-                    break          
-            if flag != -1:
-                for x in range(flag, len(lineRow)):
-                    if lineRow[x] == 255:
-                        arr.append(x)  # Append x to arr for consecutive '255'
-                    else:
-                        break  # Stop when a '0' (non-white) pixel is found
+            # for x, y in enumerate(lineRow):
+            #     if y == 255:
+            #         flag = x  
+            #         break          
+            # if flag != -1:
+            #     for x in range(flag, len(lineRow)):
+            #         if lineRow[x] == 255:
+            #             arr.append(x)  # Append x to arr for consecutive '255'
+            #         else:
+            #             break  # Stop when a '0' (non-white) pixel is found
+            # for x, y in enumerate(lineRow):
+            #     if y == 255:
+            #         arr.append(x)
+            arr = self.find_longest_lane_segment(lineRow)
             # print("min", min(arr))
             # print("max", max(arr))
-            if(max(arr) - min(arr) > 200 and min(arr) < 150):
+            if( (arr == np.array([])  or (max(arr) - min(arr) > 200 )) and self.verify_intersection(image, 90) ):
                 print("Intersection detected")
                 return -1
-            # #if(max(arr) - min(arr) > 230):
-            #     return 0
+            #if(max(arr) - min(arr) > 230):
+                #return 0
             if len(arr) > 0:
                 center_right_lane = int((min(arr) + max(arr)*2.5)/3.5) - 10
                 error = int(image.shape[1]/2) - center_right_lane
@@ -188,14 +230,15 @@ class Controller():
         The speed of the car.
         """
         if abs(angle) < 10:
-            speed = 50
+            speed = 35
         elif 10 <= abs(angle) <= 18:
-            speed = 1
+            speed = 5
         elif 18 < abs(angle) <= 20:
-            speed = 0
+            speed = 1
         elif 20 < abs(angle) <= 25:
-            speed = -5
+            speed = 1
         else:
             speed = -1
         return speed
+    
 

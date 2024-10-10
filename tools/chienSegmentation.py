@@ -1,6 +1,7 @@
 from ultralytics import YOLO
 import cv2
 import numpy as np
+#van de 0.5 nha 
 def filter_masks_by_confidence(results, confidence_threshold=0.5):
     filtered_masks = []
 
