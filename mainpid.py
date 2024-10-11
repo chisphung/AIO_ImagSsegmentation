@@ -1,254 +1,141 @@
+from CEEC_Library import GetStatus,GetRaw,GetSeg,AVControl,CloseSocket
+import cv2
 import numpy as np
 import time
-import cv2
-from utils.utils import find_majority
+import os
+import torch
+
+from ultralytics import YOLO
+
+from tools.custom import LandDetect
+from tools.controller1 import Controller
+from utils.config import ModelConfig, ControlConfig
+from utils.socket import create_socket
+from tools.chienSegmentation import myGetSegment, filter_masks_by_confidence
+
+if __name__ == "__main__":
+    # Create socket
+    # Config model
+    config_model = ModelConfig()
+    # device = torch.device('cuda')
+    # # device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    # half = device.type != 'cpu'
+
+    # Config control
+    config_control = ControlConfig()
+
+    # Controller
+    controller = Controller()
+
+    # Load YOLOv8
+    yolo = YOLO(config_model.weights_yolo)
+    print("READY: YOLO loaded nhung ma please for the first frame to be processed")
+
+    # Load PIDNet
+    # image_save_folder = "training_images"
+    # if not os.path.exists(image_save_folder):
+    #     os.makedirs(image_save_folder)
+    # image_counter = 0
+
+    #land_detector = LandDetect('pidnet-s', os.path.join(config_model.weights_lane))
+    try:
+        cnt_fps = 0
+        t_pre = 0
+
+        # Mask segmented image
+        mask_lr = False
+        mask_l = False
+        mask_r = False
+        mask_t = False
+
+        # Counter for speed up after turning
+        reset_counter = 0
+
+        while True:
+            s = GetStatus()
+            """
+            Input:
+                image: the image returned from the car
+                current_speed: the current speed of the car
+                current_angle: the current steering angle of the car
+            You must use these input values to calculate and assign the steering angle and speed of the car to 2 variables:
+            Control variables: sendBack_angle, sendBack_Speed
+                where:
+                sendBack_angle (steering angle)
+                sendBack_Speed (speed control)
+            """
+            
+            # try:
+            
+            
 
 
-class Controller():
-    def __init__(self):
-        # Initialize variables for PID control and traffic signs detection
-        self.error_arr = np.zeros(5)       # Array to store the error values for PID control
-        self.error_sp = np.zeros(5)        # Array to store the speed error values for PID control
+            try:
+                # =============Use our segmentation============
 
-        self.pre_t = time.time()           # Store the current time for steering control
-        self.pre_t_spd = time.time()       # Store the current time for speed control
+                img = GetRaw() 
+                  # Get YOLO model output
+                segmented_image = myGetSegment(img, yolo)
+                # Debugging: Print out bounding boxes and classes
+                segmented_image = cv2.resize(segmented_image, (320, 180))
+                #segmented_image = segmented_image[5:6, 312:174]
 
-        self.sendBack_angle = 0            # Initialize the steering angle to 0
-        self.sendBack_speed = 0            # Initialize the speed to 0
-
-        # List of all the possible traffic light labels
-        self.traffic_lights = ['turn_right', 'turn_left', 'straight', 'no_turn_left', 'no_turn_right', 'no_straight']
-        
-        # List of all the possible object detection labels
-        self.class_names = ['no', 'turn_right', 'straight', 'no_turn_left', 'no_turn_right', 'no_straight', 'car', 'unknown', 'turn_left']
-        
-
-        self.stored_class_names = []       # List to store the detected labels for finding majority class
-
-        self.majority_class = ""           # Initialize the majority class to empty
-        self.start_cal_area = False        # Flag to start calculating the area for turning
-        self.turning_counter = 0           # Counter to track the number of turning frames
-        self.angle_turning = 0             # Angle to turn the car
-
-        self.sum_left_corner = 0           # Sum of the pixel values in the left corner of the image
-        self.sum_right_corner = 0          # Sum of the pixel values in the right corner of the image
-        self.sum_top_corner = 0            # Sum of the pixel values in the top corner of the image
-
-        self.mask_l = False                # Flag to indicate mask left image
-        self.mask_r = False                # Flag to indicate mask right image
-        self.mask_lr = False               # Flag to indicate mask leftn and right image
-        self.mask_t = False                # Flag to indicate mask top image
-
-        self.next_step = False             # Flag to indicate the next step of the car when turning
-        self.is_turning = False            # Flag to indicate if the car is currently turning
-
-        self.reset_counter = 0             # Counter to track the number of frames since the last reset
-
-        self.is_turn_left = False          # Flag to indicate if the car is turning left
-        self.is_turn_right = False         # Flag to indicate if the car is turning right
-        self.is_straight = False           # Flag to indicate if the car is going straight
-
-        self.is_no_turn_right_case_1 = False    # Flag to indicate if there is a "no turn right" sign in case 1
-        self.is_no_turn_right_case_2 = False    # Flag for case 2
-        self.is_no_turn_right_case_3 = False    # Flag for case 3
-        self.is_no_turn_right_case_4 = False    # Flag for case 4
-
-        self.is_turn_left_case_1 = False        # Flag to indicate if there is a "turn left" sign in case 1
-        self.is_turn_left_case_2 = False        # Flag for case 2
-
-    def reset(self):
-        # Reset all values to default values
-        self.turning_counter = 0
-        self.majority_class = ""
-        self.start_cal_area = False
-        self.stored_class_names = []
-
-        self.mask_lr = False
-        self.mask_l = False
-        self.mask_r = False
-        self.mask_t = False
-
-        self.majority_class = ""
-        self.start_cal_area = False
-        self.turning_counter = 0
-        self.angle_turning = 0
-
-        self.next_step = False
-        self.is_turning = False
-
-        self.reset_counter = 0
-
-        self.is_turn_left = False
-        self.is_turn_right = False
-        self.is_straight = False
-
-        self.is_no_turn_right_case_1 = False
-        self.is_no_turn_right_case_2 = False
-        self.is_no_turn_right_case_3 = False
-        self.is_no_turn_right_case_4 = False
-
-        self.is_turn_left_case_1 = False
+                # =============Use BTC segmentation============
+                # segmented_image = GetSeg()
+                # segmented_image = cv2.cvtColor(segmented_image, cv2.COLOR_BGR2GRAY)
+                # segmented_image = (segmented_image*(255/np.max(segmented_image))).astype(np.uint8)
 
 
-    # def showLine(self, image, height, height1):
-    #     img = image.copy()
-    #     img = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
-    #     cv2.line(img, (0, height), (img.shape[1], height), (255, 0, 0), 1)
-    #     cv2.line(img, (0, height1), (img.shape[1], height1), (255, 0, 0), 1)
-    #     cv2.imshow("line", img)
-    def verify_intersection(self, image, height):
-        """
-        Verify if there is an intersection in the image.
+                if True:
+                    error = controller.calc_error(segmented_image, height= 108)
+                    
+                    angle = controller.PID(error, p=0.15,  i=0.0, d=0.06)
+                    #Speed up after turning (in 35 frames)
 
-        Args:
-        image: A NumPy array representing the image.
+                    if reset_counter >= 1 and reset_counter < 35:
+                        speed = 50
+                        reset_counter += 1
+                    elif reset_counter == 35:
+                        reset_counter = 0
+                        speed = 50 
+                    else:
+                        if (error == -1):
+                            speed = 30
+                        # elif (forsee_angle >20 ):
+                        #     speed = 10
+                        else:
+                            speed = controller.calc_speed(angle)
 
-        Returns:
-        True if there is an intersection, False otherwise.
-        """
-        arr = []
-        lineRow = image[height, :]
-        for x,y in enumerate(lineRow):
-            if(y == 255):
-                arr.append(x)
-        if(max(arr) - min(arr) > 30):
-            return True
-        return False
-    
-    def find_longest_lane_segment(self, line):
-        max_length = 0
-        current_length = 0
-        start_index = 0
-        best_start_index = 0
-        
-        # Loop through the pixel values in the line
-        for x, y in enumerate(line):
-            if y == 255:  # If we find a white pixel (lane part)
-                current_length += 1
-                if current_length == 1:  # Mark the start of the sequence
-                    start_index = x
-            else:
-                if current_length > max_length:  # End of the sequence, check if it's the longest
-                    max_length = current_length
-                    best_start_index = start_index
-                current_length = 0  # Reset for the next sequence
-        
-        # Check the last sequence in case it is the longest
-        if current_length > max_length:
-            max_length = current_length
-            best_start_index = start_index
-        
-        # Return the x-positions of the longest segment
-        if max_length > 0:
-            return np.arange(best_start_index, best_start_index + max_length)
-        else:
-            return np.array([]) 
+                            if float(config_control.current_speed) > 44.5:
+                                speed = 15
 
-    
-    def calc_error(self, image, height):
-        """
-        Calculates the error between the center of the right lane and the center of the image.
+                    print("Error:", error)
+                    print("Angle:", angle)
+                    print("Speed:", speed)
+                    config_control.update(-angle, speed)
+                
+                AVControl(speed = speed, angle = -angle)
+                cv2.imshow("raw image", img)
+                cv2.imshow("segmented image", segmented_image)
+                # if config_model.view_first_view:
+                #     cv2.imshow("first view image", yolo_output)
+                
+                key = cv2.waitKey(1)
+                if key == ord('q'):
+                    break
+                # ============================================================ Calculate FPS
+                if cnt_fps >= 90:
+                    t_cur = time.time()
+                    fps = (cnt_fps + 1)/(t_cur - t_pre)
+                    t_pre = t_cur
+                    print('FPS: {:.2f}\r\n'.format(fps))
+                    cnt_fps = 0
 
-        Args:
-        image: A NumPy array representing the image.
+                cnt_fps += 1
 
-        Returns:
-        The error between the center of the right lane and the center of the image.
-        """
+            except Exception as er:
+                pass
 
-        arr = []
-        # height = 60
-        #height = 40
-        #height = 113
-        # height = 
-    
-        #self.showLine(image, height, height)
-        
-        lineRow = image[height, :]
-        flag = -1
-        try:
-            # for x, y in enumerate(lineRow):
-            #     if y == 255:
-            #         flag = x  
-            #         break          
-            # if flag != -1:
-            #     for x in range(flag, len(lineRow)):
-            #         if lineRow[x] == 255:
-            #             arr.append(x)  # Append x to arr for consecutive '255'
-            #         else:
-            #             break  # Stop when a '0' (non-white) pixel is found
-            # for x, y in enumerate(lineRow):
-            #     if y == 255:
-            #         arr.append(x)
-            arr = self.find_longest_lane_segment(lineRow)
-            # print("min", min(arr))
-            # print("max", max(arr))
-            if( (arr == np.array([])  or (max(arr) - min(arr) > 200 )) and self.verify_intersection(image, 90) ):
-                print("Intersection detected")
-                return -1
-            #if(max(arr) - min(arr) > 230):
-                #return 0
-            if len(arr) > 0:
-                center_right_lane = int((min(arr) + max(arr)*2.5)/3.5) - 10
-                error = int(image.shape[1]/2) - center_right_lane
-                return error*1.3
-            else:
-                return 0
-        except:
-            return 0
-
-
-    def PID(self, error, p, i, d):
-        """
-        Calculates the PID output for the specified error.
-
-        Args:
-        error: The error value.
-        p: The proportional gain.
-        i: The integral gain.
-        d: The derivative gain.
-
-        Returns:
-        The PID output.
-        """
-        if error == -1:
-              error = 0
-        self.error_arr[1:] = self.error_arr[0:-1]
-        self.error_arr[0] = error
-        P = error*p
-        delta_t = time.time() - self.pre_t
-        self.pre_t = time.time()
-        D = (error-self.error_arr[1])/delta_t*d
-        I = np.sum(self.error_arr)*delta_t*i
-        angle = P + I + D
-
-        if abs(angle) > 25:
-            angle = np.sign(angle)*25
-
-        return int(angle)
-
-
-
-    def calc_speed(self, angle):
-        """
-        Calculates the speed of the car based on the steering angle.
-
-        Args:
-        angle: The steering angle.
-
-        Returns:
-        The speed of the car.
-        """
-        if abs(angle) < 10:
-            speed = 35
-        elif 10 <= abs(angle) <= 18:
-            speed = 5
-        elif 18 < abs(angle) <= 20:
-            speed = 1
-        elif 20 < abs(angle) <= 25:
-            speed = 1
-        else:
-            speed = -1
-        return speed
-    
-
+    finally:
+        print('closing socket')
+        CloseSocket()

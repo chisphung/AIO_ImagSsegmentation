@@ -97,6 +97,15 @@ class Controller():
     #     cv2.line(img, (0, height1), (img.shape[1], height1), (255, 0, 0), 1)
     #     cv2.imshow("line", img)
     def verify_intersection(self, image, height):
+        """
+        Verify if there is an intersection in the image.
+
+        Args:
+        image: A NumPy array representing the image.
+
+        Returns:
+        True if there is an intersection, False otherwise.
+        """
         arr = []
         lineRow = image[height, :]
         for x,y in enumerate(lineRow):
@@ -111,7 +120,8 @@ class Controller():
         current_length = 0
         start_index = 0
         best_start_index = 0
-
+        
+        # Loop through the pixel values in the line
         for x, y in enumerate(line):
             if y == 255:  # If we find a white pixel (lane part)
                 current_length += 1
