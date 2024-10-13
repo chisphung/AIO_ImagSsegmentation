@@ -1,6 +1,6 @@
 import numpy as np
 import time
-import cv2
+
 from utils.utils import find_majority
 
 
@@ -88,14 +88,333 @@ class Controller():
         self.is_no_turn_right_case_4 = False
 
         self.is_turn_left_case_1 = False
+        self.is_turn_left_case_2 = False
+
+    def control(self, segmented_image, yolo_output):
+        if self.majority_class == "turn_left":
+            # Increase counter for controlling
+            self.reset_counter += 1
+            if self.reset_counter >= 100:
+                self.reset()
+                print("Reset"*200)
+
+        # # Calculate area of left, right, and top corner of the segmented image
+        # self.sum_right_corner = np.sum(
+        #     segmented_image[:25, -25:, 0])
+        # self.sum_left_corner = np.sum(segmented_image[:12, :12, 0])
+        # self.sum_top_corner = np.sum(segmented_image[:12, 67:92, 0])
+
+        # Toi that su deo hieu la tinh kieu gi nua!!!
+
+        print("Is calculate areas:", self.start_cal_area)
+        print("Is turning:", self.is_turning)
+
+        if self.start_cal_area:
+            self.calc_areas(segmented_image, yolo_output)
+
+        elif self.is_turning:
+            self.handle_turning()
+
+        # Get class from yolo output for adding to stored classes list
+        elif len(self.stored_class_names) < 9:
+            #preds = yolo_output.boxes.data.numpy()  # List of (bouding_box, conf, class_id)
+            preds = yolo_output.boxes.data.cpu().numpy()
+
+            for pred in preds:
+                class_id = int(pred[-1])
+                if self.class_names[class_id] in self.traffic_lights:
+                    self.stored_class_names.append(self.class_names[class_id])
+
+                # Making stored class more robust because of the wakeness of YOLO model
+                if self.class_names[class_id] == 'straight':
+                    self.stored_class_names.remove('turn_left')
+                    self.stored_class_names.remove('turn_right')
+
+                if self.class_names[class_id] == 'turn_right':
+                    self.stored_class_names.extend(['turn_right']*2)
+
+                if self.class_names[class_id] == 'turn_left':
+                    self.stored_class_names.extend(['turn_left'])
+
+                if self.class_names[class_id] == 'no_turn_right':
+                    self.stored_class_names.extend(['no_turn_right'])
+
+        # Starting to find majority class
+        elif len(self.stored_class_names) >= 9:  # 9 is a hyperparameter
+            # Get the majority class
+            self.majority_class = find_majority(
+                self.stored_class_names)[0]  # Returned in set type
+
+            # Start calculate areas
+            self.start_cal_area = True
+
+        return self.sendBack_angle, self.sendBack_speed, self.next_step, self.mask_l, self.mask_r
+
+    def handle_turning(self):
+        print("Handle Turning")
+        # Default config
+        speed = 0
+        angle = 0
+
+        # Check turning counter
+        MAX_COUNTER = 40
+        if self.turning_counter < MAX_COUNTER:
+            print('Turning Counter:', self.turning_counter)
+
+            if self.majority_class == 'turn_left':
+                if self.is_turn_left_case_1:
+                    speed = -1
+                    if self.turning_counter <= 18: # Hard
+                        angle = 1
+                    elif self.turning_counter > 18 and self.turning_counter <= 31:
+                        angle = self.angle_turning
+                    else:
+                        self.turning_counter = MAX_COUNTER
+                elif self.is_turn_left_case_2:
+                    speed = -2
+                    if self.turning_counter <= 17:
+                        angle = -1
+                    elif self.turning_counter > 17 and self.turning_counter <= 35:
+                        angle = self.angle_turning
+                    else:
+                        self.turning_counter = MAX_COUNTER
+
+            elif self.majority_class == 'turn_right':
+                speed = -5
+                if self.turning_counter <= 8:
+                    angle = 2
+                elif self.turning_counter > 8 and self.turning_counter < 26:
+                    angle = self.angle_turning
+                else:
+                    self.turning_counter = MAX_COUNTER
+
+            elif self.majority_class == 'no_turn_left':
+                speed = -3
+                if self.turning_counter <= 9:
+                    angle = 2
+                elif self.turning_counter > 9 and self.turning_counter <= 28:
+                    angle = -33
+                else:
+                    self.turning_counter = MAX_COUNTER
+                    
+            elif self.majority_class == 'no_turn_right':
+                if self.is_no_turn_right_case_1:    # Left hard
+                    speed = -2
+                    if self.turning_counter <= 17:
+                        angle = 5
+                    elif self.turning_counter > 17 and self.turning_counter <= 27:
+                        angle = self.angle_turning
+                    else:
+                        self.turning_counter = MAX_COUNTER
+                elif self.is_no_turn_right_case_2:  # Left
+                    speed = -2
+                    if self.turning_counter <= 13:
+                        angle = -1
+                    elif self.turning_counter > 13 and self.turning_counter <= 30:
+                        angle = self.angle_turning
+                    else:
+                        self.turning_counter = MAX_COUNTER
+                elif self.is_no_turn_right_case_3: # Straight (left of map)
+                    speed = -2
+                    if self.turning_counter <= 8:
+                        angle = 0
+                    elif self.turning_counter > 8 and self.turning_counter <= 15:
+                        angle = self.angle_turning
+                    else:
+                        self.turning_counter = MAX_COUNTER
+                else:   # Straight: self.is_no_turn_right_case_4
+                    speed = -1
+                    if self.turning_counter <= 13:
+                        angle = 0
+                    # elif self.turning_counter > 8 and self.turning_counter <= 15:
+                    #     angle = self.angle_turning
+                    else:
+                        self.turning_counter = MAX_COUNTER
+
+            elif self.majority_class == 'straight':
+                speed = -1
+                if self.turning_counter <= 25:
+                    angle = self.angle_turning
+                else:
+                    self.turning_counter = MAX_COUNTER
+
+            elif self.majority_class == 'no_straight':
+                if self.is_turn_left: # Left
+                    speed = -2
+                    if self.turning_counter <= 17:
+                        angle = 0
+                    elif self.turning_counter > 17 and self.turning_counter <= 35:
+                        angle = self.angle_turning
+                    else:
+                        self.turning_counter = MAX_COUNTER
+                else: # Right
+                    speed = -4
+                    if self.turning_counter <= 9:
+                        angle = 0
+                    elif self.turning_counter > 9 and self.turning_counter <= 25:
+                        angle = self.angle_turning
+                    else:
+                        self.turning_counter = MAX_COUNTER
+                            
+            # Set default speed
+            if speed == 0:
+                speed = 50
+
+            # Set send back values
+            self.sendBack_angle = angle
+            self.sendBack_speed = speed
+
+            # Increase the counter by 1
+            self.turning_counter += 1
+
+            # Send back to not use PID calculate again when turning
+            self.next_step = True
+
+        elif self.turning_counter >= MAX_COUNTER:
+            # Reset after turning
+            self.reset()
+
+    def handle_areas(self, areas, segmented_image):
+        print("Handle Areas:", areas)
+
+        # ============ Test
+        # self.sum_left_corner = np.sum(segmented_image[:12, :12, 0])
+        # self.sum_top_corner = np.sum(segmented_image[:12, 67:92, 0])
+        # ============
+
+        print("self.sum_left_corner", self.sum_left_corner)
+        print("self.sum_top_corner", self.sum_top_corner)
+        print("self.sum_right_corner", self.sum_right_corner)
+
+        if areas > 600.0 and self.majority_class == 'turn_right':
+            # Set angle and error turning
+            self.angle_turning = -45
+
+            # Start turning and stop cal areas
+            self.is_turning = True
+            self.start_cal_area = False
+
+        if areas > 550.0 and self.majority_class == 'turn_left':
+            if self.sum_top_corner  > 17_000:
+                self.is_turn_left_case_1 = True
+            else:
+                self.is_turn_left_case_2 = True
+
+            self.angle_turning = 26
+
+            # Start turning and stop cal areas
+            self.is_turning = True
+            self.start_cal_area = False
+
+        if areas >= 500.0 and self.majority_class == 'no_turn_left':
+            if self.sum_right_corner > self.sum_top_corner/2:  # Turn right3
+                angle = -30
+            else:
+                angle = 1e-5  # Straight
+
+            # Start turning and stop cal areas
+            self.is_turning = True
+            self.start_cal_area = False
+
+            # Set global angle
+            self.angle_turning = angle
+
+        if areas >= 500.0 and self.majority_class == 'no_turn_right':
+            if (self.sum_left_corner > 2_000 and self.sum_top_corner < 17_500):# \
+                #    or (self.sum_left_corner < 9_000 and self.sum_top_corner < 9_000):
+                
+                if self.sum_top_corner < 3_000: # Hard
+                    self.is_no_turn_right_case_1 = True
+                else:
+                    self.is_no_turn_right_case_2 = True
+
+                angle = 30  # Left
+            
+            elif self.sum_top_corner > 18_000:
+                self.is_no_turn_right_case_3 = True
+
+                angle = 0  # Straight
+                self.mask_l = True
+                self.mask_r = True
+
+            else:
+                self.is_no_turn_right_case_4 = True
+
+                angle = 0  # Straight
+                self.mask_l = True
+                self.mask_r = True
 
 
-    # def showLine(self, image, height, height1):
-    #     img = image.copy()
-    #     img = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
-    #     cv2.line(img, (0, height), (img.shape[1], height), (255, 0, 0), 1)
-    #     cv2.line(img, (0, height1), (img.shape[1], height1), (255, 0, 0), 1)
-    #     cv2.imshow("line", img)
+            # Start turning and stop cal areas
+            self.is_turning = True
+            self.start_cal_area = False
+
+            # Set global angle
+            self.angle_turning = angle
+
+        if areas > 600.0 and self.majority_class == 'straight':
+            # Set global angle
+            self.angle_turning = 0
+
+            # Start turning and stop cal areas
+            self.is_turning = True
+            self.start_cal_area = False
+
+            self.mask_l = True
+            self.mask_r = True
+
+        if areas > 500.0 and self.majority_class == 'no_straight':
+            if self.sum_left_corner > self.sum_right_corner*4:
+                # Turn left
+                angle = 22
+                self.is_turn_left = True
+            else:
+                # Turn right
+                angle = -24
+                self.is_turn_right = True
+
+            # Start turning and stop cal areas
+            self.is_turning = True
+            self.start_cal_area = False
+
+            # Set angle and error turning
+            self.angle_turning = angle
+        if areas > 500.0 and self.majority_class == '':
+            # Set angle and error turning
+            self.angle_turning = 0
+
+            # Start turning and stop cal areas
+            self.is_turning = True
+            self.start_cal_area = False
+
+    def calc_areas(self, segmented_image, yolo_output):
+        # Testing
+        print("Calculating areas!")
+        print("Majority class:", self.majority_class)
+
+        preds = yolo_output.boxes.data.numpy()  # List of (bouding_box, conf, class_id)
+
+        try:
+            for pred in preds:
+                class_id = int(pred[-1])
+                if self.class_names[class_id] == self.majority_class:
+                    # Get boxes
+                    boxes = pred[:4]
+
+                    # Calculate areas from bouding boxe
+                    areas = (boxes[2] - boxes[0]) * \
+                        (boxes[3] - boxes[1])
+
+                    self.handle_areas(areas, segmented_image)
+
+                    # print("self.start_cal_area:", self.start_cal_area)
+
+                    break
+            print("area = ", areas)
+
+        except Exception as e:
+            print(e)
+            pass
     def verify_intersection(self, image, height):
         """
         Verify if there is an intersection in the image.
@@ -115,37 +434,7 @@ class Controller():
             return True
         return False
     
-    def find_longest_lane_segment(self, line):
-        max_length = 0
-        current_length = 0
-        start_index = 0
-        best_start_index = 0
-        
-        # Loop through the pixel values in the line
-        for x, y in enumerate(line):
-            if y == 255:  # If we find a white pixel (lane part)
-                current_length += 1
-                if current_length == 1:  # Mark the start of the sequence
-                    start_index = x
-            else:
-                if current_length > max_length:  # End of the sequence, check if it's the longest
-                    max_length = current_length
-                    best_start_index = start_index
-                current_length = 0  # Reset for the next sequence
-        
-        # Check the last sequence in case it is the longest
-        if current_length > max_length:
-            max_length = current_length
-            best_start_index = start_index
-        
-        # Return the x-positions of the longest segment
-        if max_length > 0:
-            return np.arange(best_start_index, best_start_index + max_length)
-        else:
-            return np.array([]) 
-
-    
-    def calc_error(self, image, height):
+    def calc_error(self, image):
         """
         Calculates the error between the center of the right lane and the center of the image.
 
@@ -157,46 +446,21 @@ class Controller():
         """
 
         arr = []
-        # height = 60
-        #height = 40
-        #height = 113
-        # height = 
-    
-        #self.showLine(image, height, height)
+        height = 107
         
         lineRow = image[height, :]
-        flag = -1
-        try:
-            # for x, y in enumerate(lineRow):
-            #     if y == 255:
-            #         flag = x  
-            #         break          
-            # if flag != -1:
-            #     for x in range(flag, len(lineRow)):
-            #         if lineRow[x] == 255:
-            #             arr.append(x)  # Append x to arr for consecutive '255'
-            #         else:
-            #             break  # Stop when a '0' (non-white) pixel is found
-            # for x, y in enumerate(lineRow):
-            #     if y == 255:
-            #         arr.append(x)
-            arr = self.find_longest_lane_segment(lineRow)
-            # print("min", min(arr))
-            # print("max", max(arr))
-            if( (arr == np.array([])  or (max(arr) - min(arr) > 200 )) and self.verify_intersection(image, 90) ):
-                print("Intersection detected")
-                return -1
-            #if(max(arr) - min(arr) > 230):
-                #return 0
-            if len(arr) > 0:
-                center_right_lane = int((min(arr) + max(arr)*2.5)/3.5) - 10
-                error = int(image.shape[1]/2) - center_right_lane
-                return error*1.3
-            else:
-                return 0
-        except:
+        for x, y in enumerate(lineRow):
+            if y == 255:
+                arr.append(x)
+        if( max(arr) - min(arr) > 230 and self.verify_intersection(image, 100) ):
+            print ("intersection detected")
             return 0
-
+        if len(arr) > 0:
+            center_right_lane = int((min(arr) + max(arr)*2.5)/3.5) - 10
+            error = int(image.shape[1]/2) - center_right_lane
+            return error*1.3
+        else:
+            return 0
 
     def PID(self, error, p, i, d):
         """
@@ -211,8 +475,6 @@ class Controller():
         Returns:
         The PID output.
         """
-        if error == -1:
-              error = 0
         self.error_arr[1:] = self.error_arr[0:-1]
         self.error_arr[0] = error
         P = error*p
@@ -227,8 +489,6 @@ class Controller():
 
         return int(angle)
 
-
-
     def calc_speed(self, angle):
         """
         Calculates the speed of the car based on the steering angle.
@@ -241,14 +501,8 @@ class Controller():
         """
         if abs(angle) < 10:
             speed = 35
-        elif 10 <= abs(angle) <= 18:
-            speed = 5
-        elif 18 < abs(angle) <= 20:
-            speed = 1
-        elif 20 < abs(angle) <= 25:
+        elif 10 <= abs(angle) <= 20:
             speed = 1
         else:
-            speed = -1
+            speed = 1
         return speed
-    
-
