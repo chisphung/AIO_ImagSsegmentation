@@ -37,7 +37,7 @@ if __name__ == "__main__":
     image_counter = 0
 
     # Set save frequency (Save every N frames)
-    save_frequency = 3  # Save every 10 frames
+    save_frequency = 1  # Save every 10 frames
     frame_counter = 0     # Initialize frame counter
 
     try:

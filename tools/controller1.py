@@ -98,11 +98,11 @@ class Controller():
                 self.reset()
                 print("Reset"*200)
 
-        # # Calculate area of left, right, and top corner of the segmented image
-        # self.sum_right_corner = np.sum(
-        #     segmented_image[:25, -25:, 0])
-        # self.sum_left_corner = np.sum(segmented_image[:12, :12, 0])
-        # self.sum_top_corner = np.sum(segmented_image[:12, 67:92, 0])
+        # Calculate area of left, right, and top corner of the segmented image
+        self.sum_right_corner = np.sum(
+            segmented_image[:50, -50:, 0])
+        self.sum_left_corner = np.sum(segmented_image[:24, :24, 0])
+        self.sum_top_corner = np.sum(segmented_image[:24, 134:184, 0])
 
         print("Is calculate areas:", self.start_cal_area)
         print("Is turning:", self.is_turning)
@@ -405,10 +405,10 @@ class Controller():
 
                     self.handle_areas(areas, segmented_image)
 
-                    # print("self.start_cal_area:", self.start_cal_area)
+                    print("self.start_cal_area:", self.start_cal_area)
 
                     break
-            print("area = ", areas)
+            #print("area = ", areas)
 
         except Exception as e:
             print(e)
@@ -426,7 +426,7 @@ class Controller():
         arr = []
         lineRow = image[height, :]
         for x,y in enumerate(lineRow):
-            if(y == 255):
+            if(y[0] == 255):
                 arr.append(x)
         if(max(arr) - min(arr) > 30):
             return True
@@ -448,7 +448,7 @@ class Controller():
         
         lineRow = image[height, :]
         for x, y in enumerate(lineRow):
-            if y == 255:
+            if y[0] == 255:
                 arr.append(x)
         if( max(arr) - min(arr) > 230 and self.verify_intersection(image, 100) ):
             print ("intersection detected")
