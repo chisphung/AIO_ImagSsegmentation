@@ -164,7 +164,7 @@ if __name__ == "__main__":
                     cv2.imshow("segmented image", segmented_image)
 
                 if config_model.view_first_view:
-                    cv2.imshow("first view image", yolo_output)
+                     cv2.imshow("first view image", yolo_output)
                 
                 key = cv2.waitKey(1)
                 if key == ord('q'):

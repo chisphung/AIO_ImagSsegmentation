@@ -18,7 +18,7 @@ def myGetSegment(image, yolo):
     mask_image = np.uint8(mask_np)
 
      # Chuyển đổi sang định dạng uint8
-    #mask_image = cv2.cvtColor(mask_image, cv2.COLOR_GRAY2RGB)  # Chuyển đổi sang định dạng BGR
+    mask_image = cv2.cvtColor(mask_image, cv2.COLOR_GRAY2RGB)  # Chuyển đổi sang định dạng BGR
     #mask_image = cv2.resize(mask_image, (image.shape[1], image.shape[0]))  # Thay đổi kích thước mask
     #Đổi màu segment trong mask sang RGB(100,10,100)
     #custom_color = (255, 255, 255)

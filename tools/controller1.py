@@ -98,11 +98,11 @@ class Controller():
                 self.reset()
                 print("Reset"*200)
 
-        # # Calculate area of left, right, and top corner of the segmented image
-        # self.sum_right_corner = np.sum(
-        #     segmented_image[:25, -25:, 0])
-        # self.sum_left_corner = np.sum(segmented_image[:12, :12, 0])
-        # self.sum_top_corner = np.sum(segmented_image[:12, 67:92, 0])
+        # Calculate area of left, right, and top corner of the segmented image
+        self.sum_right_corner = np.sum(
+            segmented_image[:50, -50:, 0])
+        self.sum_left_corner = np.sum(segmented_image[:24, :24, 0])
+        self.sum_top_corner = np.sum(segmented_image[:24, 134:184, 0])
 
         print("Is calculate areas:", self.start_cal_area)
         print("Is turning:", self.is_turning)
@@ -405,33 +405,14 @@ class Controller():
 
                     self.handle_areas(areas, segmented_image)
 
-                    # print("self.start_cal_area:", self.start_cal_area)
+                    print("self.start_cal_area:", self.start_cal_area)
 
                     break
-            print("area = ", areas)
+            #print("area = ", areas)
 
         except Exception as e:
             print(e)
             pass
-    def verify_intersection(self, image, height):
-        """
-        Verify if there is an intersection in the image.
-
-        Args:
-        image: A NumPy array representing the image.
-
-        Returns:
-        True if there is an intersection, False otherwise.
-        """
-        arr = []
-        lineRow = image[height, :]
-        for x,y in enumerate(lineRow):
-            if(y == 255):
-                arr.append(x)
-        if(max(arr) - min(arr) > 30):
-            return True
-        return False
-    
     def calc_error(self, image):
         """
         Calculates the error between the center of the right lane and the center of the image.
@@ -448,11 +429,8 @@ class Controller():
         
         lineRow = image[height, :]
         for x, y in enumerate(lineRow):
-            if y == 255:
+            if y[0] == 255:
                 arr.append(x)
-        if( max(arr) - min(arr) > 230 and self.verify_intersection(image, 100) ):
-            print ("intersection detected")
-            return 0
         if len(arr) > 0:
             center_right_lane = int((min(arr) + max(arr)*2.5)/3.5) - 10
             error = int(image.shape[1]/2) - center_right_lane
