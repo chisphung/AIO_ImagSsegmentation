@@ -1,7 +1,7 @@
 class ModelConfig:
     def __init__(self):
         # self.weights_yolo = 'pretrain/yolov8-best.pt'
-        self.weights_yolo = 'pretrain/traffic_sign_detect.pt'
+        self.weights_yolo = 'pretrain/trapboy.pt'
         self.weights_lane = 'pretrain/pretrain_new.pt'
 
         self.img_size = 640

@@ -408,7 +408,7 @@ class Controller():
                     print("self.start_cal_area:", self.start_cal_area)
 
                     break
-            #print("area = ", areas)
+            print("area = ", areas)
 
         except Exception as e:
             print(e)

@@ -117,22 +117,23 @@ if __name__ == "__main__":
                     yolo_output = yolo(image)[0]
 
                 # # ============================================================ Controller
-                angle, speed, next_step, mask_l, mask_r = controller.control(segmented_image=segmented_image,
-                                                                             yolo_output=yolo_output)
+               # angle, speed, next_step, mask_l, mask_r = controller.control(segmented_image=segmented_image,
+                #                                                             yolo_output=yolo_output)
                 
                 
-                # Control when turing
-                if next_step:
-                    #AVControl(speed = speed, angle = -angle)
-                    print("Next step")
-                    print("Angle:", angle)
-                    print("Speed:", speed)
-                    config_control.update(-angle, speed)
+                # # Control when turing
+                # if next_step:
+                #     #AVControl(speed = speed, angle = -angle)
+                #     print("Next step")
+                #     print("Angle:", angle)
+                #     print("Speed:", speed)
+                #     config_control.update(-angle, speed)
 
-                    reset_counter = 1
+                #     reset_counter = 1
 
-                # Default control
-                else:
+                # # Default control
+                # else:
+                if True:
                     error = controller.calc_error(segmented_image)
                     angle = controller.PID(error, p=0.15,  i=0.0, d=0.06)
                     #AVControl(speed = speed, angle = -angle)
