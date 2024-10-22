@@ -17,10 +17,10 @@ class Controller():
         self.sendBack_speed = 0            # Initialize the speed to 0
 
         # List of all the possible traffic light labels
-        self.traffic_lights = ['turn_right', 'turn_left', 'straight', 'no_turn_left', 'no_turn_right', 'no_straight']
+        self.traffic_lights = ['no_turn_left', 'no_turn_right', 'stop', 'straight', 'turn_left', 'turn_right']
         
         # List of all the possible object detection labels
-        self.class_names = ['no', 'turn_right', 'straight', 'no_turn_left', 'no_turn_right', 'no_straight', 'car', 'unknown', 'turn_left']
+        self.class_names = ['no_turn_left', 'no_turn_right', 'stop', 'straight', 'turn_left', 'turn_right']
         
 
         self.stored_class_names = []       # List to store the detected labels for finding majority class
@@ -114,9 +114,12 @@ class Controller():
             self.handle_turning()
 
         # Get class from yolo output for adding to stored classes list
-        elif len(self.stored_class_names) < 9:
+        elif len(self.stored_class_names) < 6:
             #preds = yolo_output.boxes.data.numpy()  # List of (bouding_box, conf, class_id)
             preds = yolo_output.boxes.data.cpu().numpy()
+            print("Preds:", preds)
+            for pred in preds:
+                print(f"Bounding Box: {pred[:4]}, Confidence: {pred[4]}, Class ID: {pred[5]}")
 
             for pred in preds:
                 class_id = int(pred[-1])
@@ -136,13 +139,11 @@ class Controller():
 
                 if self.class_names[class_id] == 'no_turn_right':
                     self.stored_class_names.extend(['no_turn_right'])
-
         # Starting to find majority class
-        elif len(self.stored_class_names) >= 9:  # 9 is a hyperparameter
+        elif len(self.stored_class_names) >= 6:  # 9 is a hyperparameter
             # Get the majority class
             self.majority_class = find_majority(
                 self.stored_class_names)[0]  # Returned in set type
-
             # Start calculate areas
             self.start_cal_area = True
 
@@ -389,8 +390,8 @@ class Controller():
         # Testing
         print("Calculating areas!")
         print("Majority class:", self.majority_class)
-
-        preds = yolo_output.boxes.data.numpy()  # List of (bouding_box, conf, class_id)
+        #preds = yolo_output.boxes.data.numpy()  # List of (bouding_box, conf, class_id)
+        preds = yolo_output.boxes.data.cpu().numpy()
 
         try:
             for pred in preds:
@@ -403,12 +404,12 @@ class Controller():
                     areas = (boxes[2] - boxes[0]) * \
                         (boxes[3] - boxes[1])
 
+                    #print("area = ", areas)
                     self.handle_areas(areas, segmented_image)
 
                     print("self.start_cal_area:", self.start_cal_area)
 
                     break
-            print("area = ", areas)
 
         except Exception as e:
             print(e)
