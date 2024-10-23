@@ -131,7 +131,7 @@ class Controller():
             self.handle_turning()
 
         # Get class from yolo output for adding to stored classes list
-        elif len(self.stored_class_names) < 6:
+        elif len(self.stored_class_names) < 8:
             #preds = yolo_output.boxes.data.numpy()  # List of (bouding_box, conf, class_id)
             preds = yolo_output.boxes.data.cpu().numpy()
             print("Preds:", preds)
@@ -157,7 +157,7 @@ class Controller():
                 if self.class_names[class_id] == 'no_turn_right':
                     self.stored_class_names.extend(['no_turn_right'])
         # Starting to find majority class
-        elif len(self.stored_class_names) >= 6:  # 9 is a hyperparameter
+        elif len(self.stored_class_names) >= 8:  # 9 is a hyperparameter
             # Get the majority class
             self.majority_class = find_majority(
                 self.stored_class_names)[0]  # Returned in set type
@@ -173,7 +173,7 @@ class Controller():
         angle = 0
 
         # Check turning counter
-        MAX_COUNTER = 40
+        MAX_COUNTER = 25
         if self.turning_counter < MAX_COUNTER:
             print('Turning Counter:', self.turning_counter)
 
@@ -183,35 +183,34 @@ class Controller():
                     speed = -1
                     if self.turning_counter <= 3: # Hard
                         angle = 25
-                    elif self.turning_counter > 3 and self.turning_counter <= 8:
+                    elif self.turning_counter > 3 and self.turning_counter <= 5:
                         angle = self.angle_turning
                     else:
                         self.turning_counter = MAX_COUNTER
                 elif self.is_turn_left_case_2:
                     print("Left")
                     speed = -2
-                    if self.turning_counter <= 17:
+                    if self.turning_counter <= 1:
                         angle = 25
-                    elif self.turning_counter > 17 and self.turning_counter <= 35:
+                    elif self.turning_counter > 1 and self.turning_counter <= 5:
                         angle = self.angle_turning
                     else:
                         self.turning_counter = MAX_COUNTER
 
             elif self.majority_class == 'turn_right':
-                
                 speed = 0
                 if self.turning_counter <= 1:
                     angle = -25
-                elif self.turning_counter > 2 and self.turning_counter < 7:
+                elif self.turning_counter > 1 and self.turning_counter < 5:
                     angle = self.angle_turning
                 else:
                     self.turning_counter = MAX_COUNTER
 
             elif self.majority_class == 'no_turn_left':
                 speed = -3
-                if self.turning_counter <= 9:
+                if self.turning_counter <= 1:
                     angle = 2
-                elif self.turning_counter > 9 and self.turning_counter <= 28:
+                elif self.turning_counter > 1 and self.turning_counter <= 5:
                     angle = -33
                 else:
                     self.turning_counter = MAX_COUNTER
@@ -262,17 +261,17 @@ class Controller():
             elif self.majority_class == 'no_straight':
                 if self.is_turn_left: # Left
                     speed = -2
-                    if self.turning_counter <= 17:
+                    if self.turning_counter <= 11:
                         angle = 0
-                    elif self.turning_counter > 17 and self.turning_counter <= 35:
+                    elif self.turning_counter > 1 and self.turning_counter <= 5:
                         angle = self.angle_turning
                     else:
                         self.turning_counter = MAX_COUNTER
                 else: # Right
                     speed = -4
-                    if self.turning_counter <= 9:
+                    if self.turning_counter <= 1:
                         angle = 0
-                    elif self.turning_counter > 9 and self.turning_counter <= 25:
+                    elif self.turning_counter > 1 and self.turning_counter <= 5:
                         angle = self.angle_turning
                     else:
                         self.turning_counter = MAX_COUNTER
@@ -308,7 +307,7 @@ class Controller():
         print("self.sum_right_corner", self.sum_right_corner)
 
         # if areas > 600.0 and self.majority_class == 'turn_right':
-        if areas > 600 and self.majority_class == 'turn_right':
+        if areas > 650 and self.majority_class == 'turn_right':
             # Set angle and error turning
             self.angle_turning = -25
             # Start turning and stop cal areas
