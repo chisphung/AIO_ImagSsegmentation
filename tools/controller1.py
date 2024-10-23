@@ -179,6 +179,7 @@ class Controller():
 
             if self.majority_class == 'turn_left':
                 if self.is_turn_left_case_1:
+                    print("Left hard")
                     speed = -1
                     if self.turning_counter <= 3: # Hard
                         angle = 25
@@ -187,19 +188,21 @@ class Controller():
                     else:
                         self.turning_counter = MAX_COUNTER
                 elif self.is_turn_left_case_2:
+                    print("Left")
                     speed = -2
                     if self.turning_counter <= 17:
-                        angle = -1
+                        angle = 25
                     elif self.turning_counter > 17 and self.turning_counter <= 35:
                         angle = self.angle_turning
                     else:
                         self.turning_counter = MAX_COUNTER
 
             elif self.majority_class == 'turn_right':
+                
                 speed = 0
                 if self.turning_counter <= 1:
                     angle = -25
-                elif self.turning_counter > 2 and self.turning_counter < 5:
+                elif self.turning_counter > 2 and self.turning_counter < 7:
                     angle = self.angle_turning
                 else:
                     self.turning_counter = MAX_COUNTER
@@ -216,31 +219,33 @@ class Controller():
             elif self.majority_class == 'no_turn_right':
                 if self.is_no_turn_right_case_1:    # Left hard
                     speed = -2
-                    if self.turning_counter <= 17:
+                    if self.turning_counter <= 1:
                         angle = 5
-                    elif self.turning_counter > 17 and self.turning_counter <= 27:
+                    elif self.turning_counter > 1 and self.turning_counter <= 5:
                         angle = self.angle_turning
                     else:
                         self.turning_counter = MAX_COUNTER
                 elif self.is_no_turn_right_case_2:  # Left
                     speed = -2
-                    if self.turning_counter <= 13:
+                    if self.turning_counter <= 1:
                         angle = -1
-                    elif self.turning_counter > 13 and self.turning_counter <= 30:
+                    elif self.turning_counter > 1 and self.turning_counter <= 5:
                         angle = self.angle_turning
                     else:
                         self.turning_counter = MAX_COUNTER
                 elif self.is_no_turn_right_case_3: # Straight (left of map)
-                    speed = -2
-                    if self.turning_counter <= 8:
+                    speed = 0
+                    print("Straight")
+                    if self.turning_counter <= 2:
                         angle = 0
-                    elif self.turning_counter > 8 and self.turning_counter <= 15:
+                    elif self.turning_counter > 2 and self.turning_counter <= 5:
                         angle = self.angle_turning
                     else:
                         self.turning_counter = MAX_COUNTER
                 else:   # Straight: self.is_no_turn_right_case_4
-                    speed = -1
-                    if self.turning_counter <= 13:
+                    speed = 0
+                    print("else")
+                    if self.turning_counter <= 5:
                         angle = 0
                     # elif self.turning_counter > 8 and self.turning_counter <= 15:
                     #     angle = self.angle_turning
@@ -306,7 +311,6 @@ class Controller():
         if areas > 600 and self.majority_class == 'turn_right':
             # Set angle and error turning
             self.angle_turning = -25
-            print("turn right")
             # Start turning and stop cal areas
             self.is_turning = True
             self.start_cal_area = False
