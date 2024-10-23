@@ -100,9 +100,21 @@ class Controller():
 
         # Calculate area of left, right, and top corner of the segmented image
         self.sum_right_corner = np.sum(
-            segmented_image[:50, -50:, 0])
-        self.sum_left_corner = np.sum(segmented_image[:24, :24, 0])
-        self.sum_top_corner = np.sum(segmented_image[:24, 134:184, 0])
+            segmented_image[:100, -100:, 0])
+        self.sum_left_corner = np.sum(segmented_image[:100, :100, 0])
+        self.sum_top_corner = np.sum(segmented_image[:100, 234:284, 0])
+        # print(segmented_image[:100, -100:, 0])
+        # print(segmented_image[:48, :48, 0])
+        # print(segmented_image[:48, 134:184, 0])
+
+
+        # non_zero_values = np.sum(segmented_image != 0)
+        # print(f"Non-zero pixel count: {non_zero_values}")
+
+
+        # print("Sum right corner:", self.sum_right_corner)
+        # print("Sum left corner:", self.sum_left_corner)
+        # print("Sum top corner:", self.sum_top_corner)
 
         print("Is calculate areas:", self.start_cal_area)
         print("Is turning:", self.is_turning)
@@ -179,7 +191,7 @@ class Controller():
                         self.turning_counter = MAX_COUNTER
 
             elif self.majority_class == 'turn_right':
-                speed = -5
+                speed = 0
                 if self.turning_counter <= 8:
                     angle = 2
                 elif self.turning_counter > 8 and self.turning_counter < 26:
@@ -285,10 +297,11 @@ class Controller():
         print("self.sum_top_corner", self.sum_top_corner)
         print("self.sum_right_corner", self.sum_right_corner)
 
-        if areas > 600.0 and self.majority_class == 'turn_right':
+        # if areas > 600.0 and self.majority_class == 'turn_right':
+        if areas > 600 and self.majority_class == 'turn_right':
             # Set angle and error turning
-            self.angle_turning = -45
-
+            self.angle_turning = -25
+            print("turn right")
             # Start turning and stop cal areas
             self.is_turning = True
             self.start_cal_area = False
