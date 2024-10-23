@@ -111,7 +111,7 @@ if __name__ == "__main__":
                 #segmented_image = cv2.cvtColor(segmented_image, cv2.COLOR_BGR2RGB)
                 # ============================================================ YOLO
                 # Resize the image to the desired dimensions
-                image = cv2.resize(image, (640, 384))
+                # image = cv2.resize(image, (640, 384))
 
                 with torch.no_grad():
                     yolo_output = yolo(image)[0]

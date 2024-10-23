@@ -99,10 +99,15 @@ class Controller():
                 print("Reset"*200)
 
         # Calculate area of left, right, and top corner of the segmented image
+        # self.sum_right_corner = np.sum(
+        #     segmented_image[:100, -100:, 0])
+        # self.sum_left_corner = np.sum(segmented_image[:100, :100, 0])
+        # self.sum_top_corner = np.sum(segmented_image[:100, 234:284, 0])
         self.sum_right_corner = np.sum(
-            segmented_image[:100, -100:, 0])
-        self.sum_left_corner = np.sum(segmented_image[:100, :100, 0])
-        self.sum_top_corner = np.sum(segmented_image[:100, 234:284, 0])
+            segmented_image[:50, -50:, 0])
+        self.sum_left_corner = np.sum(segmented_image[:24, :24, 0])
+        self.sum_top_corner = np.sum(segmented_image[:24, 134:184, 0])
+
         # print(segmented_image[:100, -100:, 0])
         # print(segmented_image[:48, :48, 0])
         # print(segmented_image[:48, 134:184, 0])
@@ -175,9 +180,9 @@ class Controller():
             if self.majority_class == 'turn_left':
                 if self.is_turn_left_case_1:
                     speed = -1
-                    if self.turning_counter <= 18: # Hard
-                        angle = 1
-                    elif self.turning_counter > 18 and self.turning_counter <= 31:
+                    if self.turning_counter <= 3: # Hard
+                        angle = 25
+                    elif self.turning_counter > 3 and self.turning_counter <= 8:
                         angle = self.angle_turning
                     else:
                         self.turning_counter = MAX_COUNTER
@@ -192,9 +197,9 @@ class Controller():
 
             elif self.majority_class == 'turn_right':
                 speed = 0
-                if self.turning_counter <= 8:
-                    angle = 2
-                elif self.turning_counter > 8 and self.turning_counter < 26:
+                if self.turning_counter <= 1:
+                    angle = -25
+                elif self.turning_counter > 2 and self.turning_counter < 5:
                     angle = self.angle_turning
                 else:
                     self.turning_counter = MAX_COUNTER
@@ -331,7 +336,7 @@ class Controller():
             # Set global angle
             self.angle_turning = angle
 
-        if areas >= 500.0 and self.majority_class == 'no_turn_right':
+        if areas >= 400.0 and self.majority_class == 'no_turn_right':
             if (self.sum_left_corner > 2_000 and self.sum_top_corner < 17_500):# \
                 #    or (self.sum_left_corner < 9_000 and self.sum_top_corner < 9_000):
                 
@@ -439,14 +444,15 @@ class Controller():
         """
 
         arr = []
-        height = 107
-        
+        # height = 107
+        height = 47       
         lineRow = image[height, :]
         for x, y in enumerate(lineRow):
             if y[0] == 255:
                 arr.append(x)
         if len(arr) > 0:
-            center_right_lane = int((min(arr) + max(arr)*2.5)/3.5) - 10
+            # center_right_lane = int((min(arr) + max(arr)*2.5)/3.5) - 10
+            center_right_lane = int((min(arr) + max(arr)*2.5)/3.5) -5
             error = int(image.shape[1]/2) - center_right_lane
             return error*1.3
         else:

@@ -106,7 +106,8 @@ if __name__ == "__main__":
                 image = GetRaw()
                 # ============================================================ PIDNet
                 segmented_image = myGetSegment(image, land_detector)
-                segmented_image = cv2.resize(segmented_image, (320, 180))
+                # segmented_image = cv2.resize(segmented_image, (320, 180))
+                segmented_image = cv2.resize(segmented_image, (160, 80))
                 #segmented_image = GetSeg()
                 #segmented_image = cv2.cvtColor(segmented_image, cv2.COLOR_BGR2RGB)
                 # ============================================================ YOLO
@@ -138,11 +139,11 @@ if __name__ == "__main__":
                     #AVControl(speed = speed, angle = -angle)
                     # Speed up after turning (in 35 frames)
                     if reset_counter >= 1 and reset_counter < 35:
-                        speed = 50
+                        speed = 35
                         reset_counter += 1
                     elif reset_counter == 35:
                         reset_counter = 0
-                        speed = 50 
+                        speed = 35 
                     else:
                         speed = controller.calc_speed(angle)
 

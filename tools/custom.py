@@ -57,8 +57,8 @@ class LandDetect:
             # Mask background
             img = img[125:, :, :]
 
-            #img = cv2.resize(img, (160, 80), interpolation=cv2.INTER_AREA)
-            img = cv2.resize(img, (320, 160), interpolation=cv2.INTER_AREA)
+            img = cv2.resize(img, (160, 80), interpolation=cv2.INTER_AREA)
+            #img = cv2.resize(img, (320, 160), interpolation=cv2.INTER_AREA)
             sv_img = np.zeros_like(img).astype(np.uint8)
             img = input_transform(img)
             img = img.transpose((2, 0, 1))
