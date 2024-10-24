@@ -112,7 +112,7 @@ if __name__ == "__main__":
                 #segmented_image = cv2.cvtColor(segmented_image, cv2.COLOR_BGR2RGB)
                 # ============================================================ YOLO
                 # Resize the image to the desired dimensions
-               
+                # image = cv2.resize(image, (640, 384))
 
                 with torch.no_grad():
                     yolo_output = yolo(image)[0]
@@ -135,7 +135,7 @@ if __name__ == "__main__":
                 # Default control
                 else:
                     error = controller.calc_error(segmented_image)
-                    angle = controller.PID(error, p=0.18,  i=0.0, d=0.1)
+                    angle = controller.PID(error, p=0.18,  i=0.0, d=0.12)
                     #AVControl(speed = speed, angle = -angle)
                     # Speed up after turning (in 35 frames)
                     if reset_counter >= 1 and reset_counter < 35:
