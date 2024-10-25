@@ -23,6 +23,7 @@ class Controller():
         self.class_names = ['no_turn_left', 'no_turn_right', 'stop', 'straight', 'turn_left', 'turn_right']
         
 
+
         self.stored_class_names = []       # List to store the detected labels for finding majority class
 
         self.majority_class = ""           # Initialize the majority class to empty
@@ -201,7 +202,7 @@ class Controller():
                 speed = 0
                 if self.turning_counter <= 1:
                     angle = -5
-                elif self.turning_counter > 1 and self.turning_counter < 6:
+                elif self.turning_counter > 1 and self.turning_counter < 7:
                     angle = self.angle_turning
                 else:
                     self.turning_counter = MAX_COUNTER
@@ -253,7 +254,7 @@ class Controller():
 
             elif self.majority_class == 'straight':
                 speed = 0
-                if self.turning_counter <= 25:
+                if self.turning_counter <= 10:
                     angle = self.angle_turning
                 else:
                     self.turning_counter = MAX_COUNTER
@@ -307,7 +308,7 @@ class Controller():
         print("self.sum_right_corner", self.sum_right_corner)
 
         # if areas > 600.0 and self.majority_class == 'turn_right':
-        if areas > 300.0 and self.majority_class == 'turn_right':
+        if areas > 350.0 and self.majority_class == 'turn_right':
             # Set angle and error turning
             self.angle_turning = -25
             # Start turning and stop cal areas
@@ -372,7 +373,7 @@ class Controller():
             # Set global angle
             self.angle_turning = angle
 
-        if areas > 400.0 and self.majority_class == 'straight':
+        if areas > 500.0 and self.majority_class == 'straight':
             # Set global angle
             self.angle_turning = 0
 
