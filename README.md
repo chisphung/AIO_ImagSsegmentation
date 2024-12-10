@@ -92,7 +92,7 @@ python main.py
 ```
 
 ## Demo
-Video demo available [here](https://youtu.be/gZ3nPZWp-eE).
+Video demo available: Delulu team [here](https://www.youtube.com/live/oFe0Hyr4-9o?si=h9vrzMw1fAr1PedO).
 
 ## Result
 - Top 3 in the qualifiers round.
