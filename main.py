@@ -10,6 +10,7 @@ from ultralytics import YOLO
 from tools.custom import LandDetect
 from tools.controller import Controller
 from utils.config import ModelConfig, ControlConfig
+from tools.segmentation import filter_masks_by_confidence, myGetSegment
 from utils.socket import create_socket
 
 if __name__ == "__main__":
@@ -26,7 +27,8 @@ if __name__ == "__main__":
     controller = Controller()
 
     # Load YOLOv8
-    yolo = YOLO(config_model.weights_yolo)
+    yolo = YOLO(config_model.weights_yolo, device).cuda()
+    # yolo.to('cuda')
     # Load the YOLOv8 ONNX model using OpenCV's dnn module
     # net = cv2.dnn.readNet('pretrain/yolov8-best.onnx')
     # # Set the preferred backend and target for running inference
@@ -36,7 +38,7 @@ if __name__ == "__main__":
     # Load PIDNet
 
             
-    land_detector = LandDetect('pidnet-s', os.path.join(config_model.weights_lane))
+    land_detector = YOLO(config_model.weights_lane).cuda()
     try:
         cnt_fps = 0
         t_pre = 0
@@ -103,10 +105,10 @@ if __name__ == "__main__":
             try:
                 # Decode image in byte type recieved from server
                 image = GetRaw()
-                
                 # ============================================================ PIDNet
-                segmented_image = land_detector.reference(
-                    image, config_model.segmented_output_size, mask_lr, mask_l, mask_r, mask_t)
+                segmented_image = myGetSegment(image, land_detector)
+                # segmented_image = cv2.resize(segmented_image, (320, 180))
+                segmented_image = cv2.resize(segmented_image, (160, 80))
                 #segmented_image = GetSeg()
                 #segmented_image = cv2.cvtColor(segmented_image, cv2.COLOR_BGR2RGB)
                 # ============================================================ YOLO
@@ -116,9 +118,9 @@ if __name__ == "__main__":
                 with torch.no_grad():
                     yolo_output = yolo(image)[0]
 
-                # ============================================================ Controller
+                # # ============================================================ Controller
                 angle, speed, next_step, mask_l, mask_r = controller.control(segmented_image=segmented_image,
-                                                                             yolo_output=yolo_output)
+                                                                            yolo_output=yolo_output)
                 
                 
                 # Control when turing
@@ -134,15 +136,15 @@ if __name__ == "__main__":
                 # Default control
                 else:
                     error = controller.calc_error(segmented_image)
-                    angle = controller.PID(error, p=0.2, i=0.0, d=0.02)
+                    angle = controller.PID(error, p=0.18,  i=0.0, d=0.15)
                     #AVControl(speed = speed, angle = -angle)
                     # Speed up after turning (in 35 frames)
                     if reset_counter >= 1 and reset_counter < 35:
-                        speed = 50
+                        speed = 25
                         reset_counter += 1
                     elif reset_counter == 35:
                         reset_counter = 0
-                        speed = 50 
+                        speed = 25 
                     else:
                         speed = controller.calc_speed(angle)
 
@@ -156,10 +158,6 @@ if __name__ == "__main__":
                     config_control.update(-angle, speed)
                 
                 AVControl(speed = speed, angle = -angle)
-                # ============================================================ Show image
-                # Resize image if it's too small for you to see
-                #segmented_image = cv2.resize(
-                 #    segmented_image, (336, 200), interpolation=cv2.INTER_NEAREST)
 
                 
                 yolo_output = yolo_output.plot()
@@ -168,7 +166,7 @@ if __name__ == "__main__":
                     cv2.imshow("segmented image", segmented_image)
 
                 if config_model.view_first_view:
-                    cv2.imshow("first view image", yolo_output)
+                     cv2.imshow("first view image", yolo_output)
                 
                 key = cv2.waitKey(1)
                 if key == ord('q'):

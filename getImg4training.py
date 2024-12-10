@@ -11,7 +11,7 @@ from tools.custom import LandDetect
 from tools.controller import Controller
 from utils.config import ModelConfig, ControlConfig
 from utils.socket import create_socket
-from tools.chienSegmentation import myGetSegment, filter_masks_by_confidence
+from tools.segmentation import myGetSegment, filter_masks_by_confidence
 
 if __name__ == "__main__":
     # Create socket
@@ -37,7 +37,7 @@ if __name__ == "__main__":
     image_counter = 0
 
     # Set save frequency (Save every N frames)
-    save_frequency = 3  # Save every 10 frames
+    save_frequency = 1  # Save every 10 frames
     frame_counter = 0     # Initialize frame counter
 
     try:
@@ -61,7 +61,7 @@ if __name__ == "__main__":
 
                 # Increment frame counter
                 frame_counter += 1
-                
+                img = cv2.resize(img, (640, 384))
                 # Save image only if frame_counter reaches the save frequency
                 if frame_counter % save_frequency == 0:
                     image_filename = os.path.join(image_save_folder, f"image_{image_counter:04d}.png")
