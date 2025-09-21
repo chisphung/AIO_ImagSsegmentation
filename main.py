@@ -1,4 +1,5 @@
-from CEEC_Library import GetStatus,GetRaw,GetSeg,AVControl,CloseSocket
+# from CEEC_Library import GetStatus,GetRaw,GetSeg,AVControl,CloseSocket
+from CEEC_Library import GetStatus,GetRaw,AVControl,CloseSocket
 import cv2
 import numpy as np
 import time
@@ -24,7 +25,11 @@ if __name__ == "__main__":
     config_control = ControlConfig()
 
     # Controller
-    controller = Controller()
+    # Toggle to enable/disable detection model assistance for intersections
+    USE_DETECTION_MODEL = False  # set True to use YOLO outputs, False to use segmentation-only logic
+    DEBUG_CONTROLLER = True     # prints verbose controller logs when True
+
+    controller = Controller(use_detection_model=USE_DETECTION_MODEL, debug=DEBUG_CONTROLLER)
 
     # Load YOLOv8
     yolo = YOLO(config_model.weights_yolo, device).cuda()
@@ -116,11 +121,13 @@ if __name__ == "__main__":
                 # image = cv2.resize(image, (640, 384))
 
                 with torch.no_grad():
-                    yolo_output = yolo(image)[0]
+                    yolo_output = yolo(image)[0] if USE_DETECTION_MODEL else None
 
                 # # ============================================================ Controller
-                angle, speed, next_step, mask_l, mask_r = controller.control(segmented_image=segmented_image,
-                                                                            yolo_output=yolo_output)
+                angle, speed, next_step, mask_l, mask_r = controller.control(
+                    segmented_image=segmented_image,
+                    yolo_output=yolo_output,
+                )
                 
                 
                 # Control when turing
