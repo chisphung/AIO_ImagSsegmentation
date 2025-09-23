@@ -1,4 +1,4 @@
-from CEEC_Library import GetStatus,GetRaw,GetSeg,AVControl,CloseSocket
+from CEEC_Library import GetStatus, GetRaw, GetSeg, AVControl, CloseSocket
 import cv2
 import numpy as np
 import time
@@ -37,7 +37,6 @@ if __name__ == "__main__":
 
     # Load PIDNet
 
-            
     land_detector = YOLO(config_model.weights_lane).cuda()
     try:
         cnt_fps = 0
@@ -65,7 +64,7 @@ if __name__ == "__main__":
                 sendBack_angle (steering angle)
                 sendBack_Speed (speed control)
             """
-                
+
             # try:
             #     # Send signal to the server.
             #     message_getState = bytes("0", "utf-8")
@@ -79,7 +78,7 @@ if __name__ == "__main__":
 
             #     # Decode the received data from UTF-8.
             #     config_control.current_speed, config_control.current_angle = state_date.decode("utf-8").split(" ")
-                
+
             # except Exception as er:
             #     pass
 
@@ -92,15 +91,12 @@ if __name__ == "__main__":
 
             # # Receive 100000 bytes of data from the server.
             # data = s.recv(100000)
-            
+
             # try:
             #     config_control.current_speed = speed
             #     config_control.current_angle = angle
             # except:
             #     pass
-            
-            
-
 
             try:
                 # Decode image in byte type recieved from server
@@ -109,8 +105,8 @@ if __name__ == "__main__":
                 segmented_image = myGetSegment(image, land_detector)
                 # segmented_image = cv2.resize(segmented_image, (320, 180))
                 segmented_image = cv2.resize(segmented_image, (160, 80))
-                #segmented_image = GetSeg()
-                #segmented_image = cv2.cvtColor(segmented_image, cv2.COLOR_BGR2RGB)
+                # segmented_image = GetSeg()
+                # segmented_image = cv2.cvtColor(segmented_image, cv2.COLOR_BGR2RGB)
                 # ============================================================ YOLO
                 # Resize the image to the desired dimensions
                 # image = cv2.resize(image, (640, 384))
@@ -120,12 +116,11 @@ if __name__ == "__main__":
 
                 # # ============================================================ Controller
                 angle, speed, next_step, mask_l, mask_r = controller.control(segmented_image=segmented_image,
-                                                                            yolo_output=yolo_output)
-                
-                
+                                                                             yolo_output=yolo_output)
+
                 # Control when turing
                 if next_step:
-                    #AVControl(speed = speed, angle = -angle)
+                    # AVControl(speed = speed, angle = -angle)
                     print("Next step")
                     print("Angle:", angle)
                     print("Speed:", speed)
@@ -136,15 +131,15 @@ if __name__ == "__main__":
                 # Default control
                 else:
                     error = controller.calc_error(segmented_image)
-                    angle = controller.PID(error, p=0.18,  i=0.0, d=0.15)
-                    #AVControl(speed = speed, angle = -angle)
+                    angle = controller.PID(error, p=0.18,  i=0.15, d=0.15)
+                    # AVControl(speed = speed, angle = -angle)
                     # Speed up after turning (in 35 frames)
                     if reset_counter >= 1 and reset_counter < 35:
                         speed = 25
                         reset_counter += 1
                     elif reset_counter == 35:
                         reset_counter = 0
-                        speed = 25 
+                        speed = 25
                     else:
                         speed = controller.calc_speed(angle)
 
@@ -156,18 +151,17 @@ if __name__ == "__main__":
                     print("Speed:", speed)
 
                     config_control.update(-angle, speed)
-                
-                AVControl(speed = speed, angle = -angle)
 
-                
+                AVControl(speed=speed, angle=-angle)
+
                 yolo_output = yolo_output.plot()
 
                 if config_model.view_seg:
                     cv2.imshow("segmented image", segmented_image)
 
                 if config_model.view_first_view:
-                     cv2.imshow("first view image", yolo_output)
-                
+                    cv2.imshow("first view image", yolo_output)
+
                 key = cv2.waitKey(1)
                 if key == ord('q'):
                     break

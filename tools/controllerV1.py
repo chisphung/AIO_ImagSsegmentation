@@ -483,11 +483,6 @@ class Controller():
 
     def detect_intersection(self, image, low_height=48, low_window=5, check_height=62, min_width=140, top_thresh=15000):
         # Scan lower band, then verify with upper band
-        try:
-            print(
-                f"[detect_intersection] params: low_height={low_height}, window={low_window}, check_height={check_height}, min_width={min_width}, top_thresh={top_thresh}")
-        except Exception:
-            pass
         for h in range(low_height, low_height + low_window):
             arr = [x for x, y in enumerate(image[h, :]) if y[0] == 255]
             if len(arr) > 0 and max(arr) - min(arr) > 50:
@@ -496,19 +491,10 @@ class Controller():
                 arr2 = [x for x, y in enumerate(lineRow) if y[0] == 255]
                 # dynamic top-center sum
                 _, _, sum_top = self._compute_region_sums(image)
-                try:
-                    low_width = (max(arr) - min(arr)) if len(arr) > 0 else 0
-                    up_width = (max(arr2) - min(arr2)) if len(arr2) > 0 else 0
-                    print(
-                        f"[detect_intersection] candidate at h={h}: low_width={low_width}, up_width={up_width}, sum_top={sum_top}")
-                except Exception:
-                    pass
 
                 if len(arr2) > 0 and max(arr2) - min(arr2) > min_width and sum_top < top_thresh:
-                    print("[detect_intersection] Intersection confirmed!")
                     return True
 
-        print("[detect_intersection] No intersection")
         return False
 
     def calc_error(self, image):
@@ -525,7 +511,6 @@ class Controller():
                 arr.append(x)
 
         if self.detect_intersection(image):
-            print("[calc_error] intersection detected")
             self.intersection_detected = True
             return 0
 
@@ -605,3 +590,4 @@ class Controller():
             if len(arr) > 0 and max(arr) - min(arr) > 50:
                 return True
         return False
+# pid i = 0.01
