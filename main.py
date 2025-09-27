@@ -8,7 +8,7 @@ import torch
 from ultralytics import YOLO
 
 from tools.custom import LandDetect
-from tools.controller import Controller
+from tools.controllerV1 import Controller
 from utils.config import ModelConfig, ControlConfig
 from tools.segmentation import filter_masks_by_confidence, myGetSegment
 from utils.socket import create_socket
@@ -131,7 +131,7 @@ if __name__ == "__main__":
                 # Default control
                 else:
                     error = controller.calc_error(segmented_image)
-                    angle = controller.PID(error, p=0.18,  i=0.15, d=0.15)
+                    angle = controller.PID(error, p=0.18,  i=0.01, d=0.15)
                     # AVControl(speed = speed, angle = -angle)
                     # Speed up after turning (in 35 frames)
                     if reset_counter >= 1 and reset_counter < 35:
