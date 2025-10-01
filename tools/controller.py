@@ -530,7 +530,7 @@ class Controller():
             return 0
 
         if len(arr) > 0:
-            center_right_lane = int((min(arr) + max(arr)*2.5)/3.5) - 10
+            center_right_lane = int((min(arr) + max(arr)*2.5)/3.5) - 8
             error = int(image.shape[1]/2) - center_right_lane
             # Base scaling
             error = error * 1.3
