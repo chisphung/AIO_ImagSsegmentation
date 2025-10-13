@@ -1,12 +1,12 @@
 class ModelConfig:
     def __init__(self):
         # self.weights_yolo = 'pretrain/yolov8-best.pt'
-        self.weights_yolo = 'pretrain/mainYoloModel.pt'
-        self.weights_lane = 'pretrain/enhanced_segmentation.pt'
+        self.weights_yolo = 'pretrain/signboard.pt'
+        self.weights_lane = 'pretrain/segmentation_v25.pt'
 
         self.img_size = 640
         self.conf_thres = 0.7
-        self.iou_thres = 0.45
+        self.iou_thres = 0.5
         self.classes = None
         self.agnostic_nms = False
 

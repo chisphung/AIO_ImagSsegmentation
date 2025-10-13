@@ -20,12 +20,12 @@ class Controller():
         self.sendBack_speed = 0            # Initialize the speed to 0
 
         # List of all the possible traffic light labels
-        self.traffic_lights = ['no_turn_right', 'stop',
-                               'straight', 'turn_left', 'turn_right']
+        self.traffic_lights = ['left', 'no left', 'no right', 'right', 'stop', 'straight']
 
         # List of all the possible object detection labels
-        self.class_names = ['no_turn_right', 'stop',
-                            'straight', 'turn_left', 'turn_right']
+        # self.class_names = ['no right', 'stop',
+        #                     'straight', 'left', 'right']
+        self.class_names = ['left', 'no left', 'no right', 'right', 'stop', 'straight']
 
         # List to store the detected labels for finding majority class
         self.stored_class_names = []
@@ -79,6 +79,7 @@ class Controller():
         """Return prediction array safely as numpy array with shape (N, >=6)."""
         try:
             if yolo_output is None or yolo_output.boxes is None or yolo_output.boxes.data is None:
+                print("[_safe_get_preds] No valid yolo_output or boxes")
                 return np.empty((0, 6), dtype=float)
             preds = yolo_output.boxes.data
             # Convert to cpu numpy if available (torch tensors)
@@ -194,19 +195,24 @@ class Controller():
                 label = self.class_names[class_id]
                 if label in self.traffic_lights:
                     self.stored_class_names.append(label)
+                    print(f"[control] Added sign '{label}' to stored list (count={len(self.stored_class_names)})")
 
-                if label == 'turn_left':
-                    self.stored_class_names.extend(['turn_left']*3)
+                if label == 'left':
+                    self.stored_class_names.extend(['left']*3)
+                    print(f"[control] Boosted 'left' sign (count={len(self.stored_class_names)})")
         # Starting to find majority class
         elif len(self.stored_class_names) >= 30:  # Hyperparameter for stability
             # Get the majority class
             self.majority_class = find_majority(
                 self.stored_class_names)[0]  # Returned in set type
-            # Start calculate areas only if intersection detected
-            if self.intersection_detected:
-                self.start_cal_area = True
+            # Start area calculation immediately after getting majority class
+            # (intersection detection is optional - used for early turning decision)
+            print(f"[control] Majority class determined: {self.majority_class}")
+            self.start_cal_area = True
 
         elif self.intersection_detected and len(self.stored_class_names) < 30 and not self.is_turning and not self.start_cal_area:
+            # Emergency turn if intersection detected but not enough sign samples yet
+            print("[control] Early intersection turn triggered")
             self.is_turning = True
             self.angle_turning = 20  # Stronger left turn
 
@@ -222,7 +228,7 @@ class Controller():
         # Check turning counter
         MAX_COUNTER = 25
         if self.turning_counter < MAX_COUNTER:
-            if self.majority_class == 'turn_left':
+            if self.majority_class == 'left':
                 if self.is_turn_left_case_1:
                     speed = 0
                     if self.turning_counter <= 3:  # Hard
@@ -240,7 +246,7 @@ class Controller():
                     else:
                         self.turning_counter = MAX_COUNTER
 
-            elif self.majority_class == 'turn_right':
+            elif self.majority_class == 'right':
                 speed = 0
                 if self.turning_counter <= 2:
                     angle = -5
@@ -249,7 +255,7 @@ class Controller():
                 else:
                     self.turning_counter = MAX_COUNTER
 
-            elif self.majority_class == 'no_turn_left':
+            elif self.majority_class == 'no left':
                 speed = 0
                 if self.turning_counter <= 1:
                     angle = 2
@@ -258,7 +264,7 @@ class Controller():
                 else:
                     self.turning_counter = MAX_COUNTER
 
-            elif self.majority_class == 'no_turn_right':
+            elif self.majority_class == 'no right':
                 if self.is_no_turn_right_case_1:    # Left hard
                     speed = 0
                     if self.turning_counter <= 1:
@@ -352,14 +358,14 @@ class Controller():
         if areas < 100:
             self.reset()
         # if areas > 600.0 and self.majority_class == 'turn_right':
-        if areas > 615.0 and self.majority_class == 'turn_right':
+        if areas > 600.0 and self.majority_class == 'right':
             # Set angle and error turning
             self.angle_turning = -25
             # Start turning and stop cal areas
             self.is_turning = True
             self.start_cal_area = False
 
-        if areas > 550.0 and self.majority_class == 'turn_left':
+        if areas > 550.0 and self.majority_class == 'left':
             if self.sum_top_corner > 17_000:
                 self.is_turn_left_case_1 = True
             else:
@@ -385,7 +391,7 @@ class Controller():
             # Set global angle
             self.angle_turning = angle
 
-        if areas >= 650.0 and self.majority_class == 'no_turn_right':
+        if areas >= 650.0 and self.majority_class == 'no right':
             if (self.sum_left_corner > 2_000 and self.sum_top_corner < 17_500):  # \
                 #    or (self.sum_left_corner < 9_000 and self.sum_top_corner < 9_000):
 
@@ -454,6 +460,7 @@ class Controller():
 
     def calc_areas(self, segmented_image, yolo_output):
         preds = self._safe_get_preds(yolo_output)
+        print(f"[calc_areas] Looking for majority_class={self.majority_class}, got {len(preds)} predictions")
 
         try:
             for pred in preds:
@@ -463,7 +470,9 @@ class Controller():
                     continue
                 if class_id < 0 or class_id >= len(self.class_names):
                     continue
-                if self.class_names[class_id] == self.majority_class:
+                detected_label = self.class_names[class_id]
+                print(f"[calc_areas] Checking pred: class_id={class_id}, label={detected_label}")
+                if detected_label == self.majority_class:
                     # Get boxes
                     boxes = pred[:4]
 
@@ -471,6 +480,7 @@ class Controller():
                     try:
                         areas = float(
                             max(0.0, (boxes[2] - boxes[0])) * max(0.0, (boxes[3] - boxes[1])))
+                        print(f"[calc_areas] *** MATCH! areas={areas}, boxes={boxes}")
                     except Exception:
                         continue
 
@@ -478,7 +488,8 @@ class Controller():
 
                     break
 
-        except Exception as e:
+        except Exception:
+            print("[calc_areas] Exception during prediction processing")
             pass
 
     def detect_intersection(self, image, low_height=48, low_window=5, check_height=62, min_width=140, top_thresh=15000):
