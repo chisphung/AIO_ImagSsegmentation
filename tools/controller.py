@@ -29,6 +29,12 @@ class Controller():
 
         # List to store the detected labels for finding majority class
         self.stored_class_names = []
+        
+        # New: Store detected signboards with their areas for weighted decision making
+        self.signboard_history = []  # List of tuples: (label, area, timestamp)
+        self.max_detected_area = 0   # Track maximum area detected for each signboard
+        self.stored_signboard = None # The final signboard to use at intersection
+        self.signboard_confidence = 0  # Weighted confidence score
 
         self.majority_class = ""           # Initialize the majority class to empty
         self.start_cal_area = False        # Flag to start calculating the area for turning
@@ -69,6 +75,9 @@ class Controller():
         self.is_turn_left_case_2 = False        # Flag for case 2
 
         self.intersection_detected = False
+        
+        # NEW: State for "waiting for intersection after signboard confirmed"
+        self.waiting_for_intersection = False
 
         # Lane tracking helpers for robustness in sharp turns
         self.last_center_right_lane = None
@@ -128,6 +137,15 @@ class Controller():
         self.majority_class = ""
         self.start_cal_area = False
         self.stored_class_names = []
+        
+        # Reset signboard history and stored decision
+        self.signboard_history = []
+        self.max_detected_area = 0
+        self.stored_signboard = None
+        self.signboard_confidence = 0
+        
+        # Reset intersection waiting state
+        self.waiting_for_intersection = False
 
         self.mask_lr = False
         self.mask_l = False
@@ -174,17 +192,28 @@ class Controller():
 
         # Debug flags can be re-enabled if needed
 
-        if self.start_cal_area:
-            self.calc_areas(segmented_image, yolo_output)
-
-        elif self.is_turning:
+        # ==================== NEW CLEAN STATE MACHINE ====================
+        # State 1: Currently turning - execute turn sequence
+        if self.is_turning:
             self.handle_turning()
-
-        # Get class from yolo output for adding to stored classes list
+        
+        # State 2: Waiting for intersection after signboard confirmed
+        elif self.waiting_for_intersection:
+            print(f"[control] 🔍 Waiting for intersection... (signboard: {self.majority_class})")
+            
+            # Check if intersection detected (by calc_error or current frame)
+            if self.intersection_detected or self.detect_intersection(segmented_image):
+                print(f"[control] ✓ INTERSECTION REACHED! Applying signboard: {self.majority_class}")
+                self.intersection_detected = True
+                self.waiting_for_intersection = False
+                
+                # Apply the stored signboard decision
+                self._apply_signboard_decision()
+        
+        # State 3: Collecting signboard samples (< 30 samples)
         elif len(self.stored_class_names) < 30:
             preds = self._safe_get_preds(yolo_output)
-            # Optionally inspect preds for debugging
-
+            
             for pred in preds:
                 try:
                     class_id = int(pred[-1])
@@ -195,30 +224,116 @@ class Controller():
                 label = self.class_names[class_id]
                 if label in self.traffic_lights:
                     self.stored_class_names.append(label)
-                    print(f"[control] Added sign '{label}' to stored list (count={len(self.stored_class_names)})")
+                    print(f"[control] 📝 Added sign '{label}' to stored list (count={len(self.stored_class_names)})")
+                    
+                    # Store in signboard history with area for weighting
+                    boxes = pred[:4]
+                    try:
+                        areas = float(max(0.0, (boxes[2] - boxes[0])) * max(0.0, (boxes[3] - boxes[1])))
+                        current_time = time.time()
+                        self.signboard_history.append((label, areas, current_time))
+                        if areas > self.max_detected_area:
+                            self.max_detected_area = areas
+                        area_weight = (areas / 100.0) ** 1.5
+                        self.signboard_confidence += area_weight
+                        self.stored_signboard = label
+                        print(f"[control] 💾 Stored: {label}, area={areas:.1f}, confidence={self.signboard_confidence:.1f}")
+                    except Exception:
+                        pass
 
                 if label == 'left':
                     self.stored_class_names.extend(['left']*3)
-                    print(f"[control] Boosted 'left' sign (count={len(self.stored_class_names)})")
-        # Starting to find majority class
-        elif len(self.stored_class_names) >= 30:  # Hyperparameter for stability
-            # Get the majority class
-            self.majority_class = find_majority(
-                self.stored_class_names)[0]  # Returned in set type
-            # Start area calculation immediately after getting majority class
-            # (intersection detection is optional - used for early turning decision)
-            print(f"[control] Majority class determined: {self.majority_class}")
-            self.start_cal_area = True
-
-        elif self.intersection_detected and len(self.stored_class_names) < 30 and not self.is_turning and not self.start_cal_area:
-            # Emergency turn if intersection detected but not enough sign samples yet
-            print("[control] Early intersection turn triggered")
-            self.is_turning = True
-            self.angle_turning = 20  # Stronger left turn
+                    print(f"[control] 📊 Boosted 'left' sign (count={len(self.stored_class_names)})")
+            
+            # # Check for early trigger: 10+ samples AND intersection already visible
+            # if len(self.stored_class_names) >= 10 and (self.intersection_detected or self.detect_intersection(segmented_image)):
+            #     print(f"[control] ⚡ EARLY TRIGGER: Intersection detected with {len(self.stored_class_names)} samples!")
+            #     self.majority_class = find_majority(self.stored_class_names)[0]
+            #     print(f"[control] 📋 Early majority class: {self.majority_class}")
+            #     self.waiting_for_intersection = True  # Enter intersection waiting loop
+                
+        # State 4: 30+ samples collected, determine majority and start waiting for intersection
+        elif len(self.stored_class_names) >= 30:
+            # Determine the majority class from collected samples
+            self.majority_class = find_majority(self.stored_class_names)[0]
+            print(f"[control] ✅ Signboard confirmed: {self.majority_class} (from {len(self.stored_class_names)} samples)")
+            print(f"[control] 🔍 Now waiting for intersection...")
+            
+            # Enter intersection waiting state
+            self.waiting_for_intersection = True
 
         # Increment frame counter and return
         self.reset_counter += 1
         return self.sendBack_angle, self.sendBack_speed, self.next_step, self.mask_l, self.mask_r
+
+    def _apply_signboard_decision(self):
+        """
+        Apply the stored majority_class signboard decision by setting turn parameters.
+        This method is called when intersection is reached after signboard is confirmed.
+        """
+        print(f"[_apply_signboard_decision] Applying: {self.majority_class}")
+        
+        if self.majority_class == 'right':
+            self.angle_turning = -25
+            self.is_turning = True
+            print("[_apply_signboard_decision] → RIGHT TURN (-25°)")
+            
+        elif self.majority_class == 'left':
+            if self.sum_top_corner > 17_000:
+                self.angle_turning = 32
+                self.is_turn_left_case_1 = True
+                print("[_apply_signboard_decision] → LEFT TURN Case 1 (32°)")
+            else:
+                self.angle_turning = 28
+                self.is_turn_left_case_2 = True
+                print("[_apply_signboard_decision] → LEFT TURN Case 2 (28°)")
+            self.is_turning = True
+            
+        elif self.majority_class == 'straight':
+            self.angle_turning = 0
+            self.is_turning = True
+            self.mask_l = True
+            self.mask_r = True
+            print("[_apply_signboard_decision] → STRAIGHT (0°, mask L+R)")
+            
+        elif self.majority_class == 'no right':
+            if self.sum_left_corner > 2_000 and self.sum_top_corner < 17_500:
+                self.angle_turning = 30
+                self.is_no_turn_right_case_1 = True
+                print("[_apply_signboard_decision] → NO RIGHT: Turn left (30°)")
+            else:
+                self.angle_turning = 0
+                self.mask_l = True
+                self.mask_r = True
+                self.is_no_turn_right_case_2 = True
+                print("[_apply_signboard_decision] → NO RIGHT: Go straight (mask L+R)")
+            self.is_turning = True
+            
+        elif self.majority_class == 'stop':
+            self.angle_turning = 0
+            self.is_turning = True
+            print("[_apply_signboard_decision] → STOP (0°)")
+            
+        elif self.majority_class == 'no left':
+            if self.sum_right_corner > self.sum_top_corner/2:
+                self.angle_turning = -25
+                print("[_apply_signboard_decision] → NO LEFT: Turn right (-25°)")
+            else:
+                self.angle_turning = 0
+                print("[_apply_signboard_decision] → NO LEFT: Go straight (0°)")
+            self.is_turning = True
+            
+        elif self.majority_class == 'no_straight':
+            if self.sum_left_corner > self.sum_right_corner*4:
+                self.angle_turning = 26
+                print("[_apply_signboard_decision] → NO STRAIGHT: Turn left (26°)")
+            else:
+                self.angle_turning = -24
+                print("[_apply_signboard_decision] → NO STRAIGHT: Turn right (-24°)")
+            self.is_turning = True
+            
+        else:
+            print(f"[_apply_signboard_decision] ⚠️ Unhandled class: {self.majority_class}")
 
     def handle_turning(self):
         # Default config
@@ -232,7 +347,7 @@ class Controller():
                 if self.is_turn_left_case_1:
                     speed = 0
                     if self.turning_counter <= 3:  # Hard
-                        angle = 5
+                        angle = 25
                     elif self.turning_counter > 3 and self.turning_counter <= 6:
                         angle = self.angle_turning
                     else:
@@ -248,9 +363,9 @@ class Controller():
 
             elif self.majority_class == 'right':
                 speed = 0
-                if self.turning_counter <= 2:
-                    angle = -5
-                elif self.turning_counter > 2 and self.turning_counter < 7:
+                # if self.turning_counter <= 1:
+                #     angle = -5
+                if self.turning_counter >= 0 and self.turning_counter < 7:
                     angle = self.angle_turning
                 else:
                     self.turning_counter = MAX_COUNTER
@@ -358,106 +473,167 @@ class Controller():
         if areas < 100:
             self.reset()
         # if areas > 600.0 and self.majority_class == 'turn_right':
-        if areas > 600.0 and self.majority_class == 'right':
-            # Set angle and error turning
-            self.angle_turning = -25
-            # Start turning and stop cal areas
-            self.is_turning = True
-            self.start_cal_area = False
-
-        if areas > 550.0 and self.majority_class == 'left':
-            if self.sum_top_corner > 17_000:
-                self.is_turn_left_case_1 = True
+        if areas > 900.0 and self.majority_class == 'right':
+            # CRITICAL: Check intersection BEFORE triggering turn!
+            if self.detect_intersection(segmented_image):
+                print(f"[handle_areas] ✓ RIGHT turn triggered at area={areas:.1f} with intersection confirmed")
+                # Set angle and error turning
+                self.angle_turning = -25
+                # Start turning and stop cal areas
+                self.is_turning = True
+                self.start_cal_area = False
             else:
-                self.is_turn_left_case_2 = True
+                print(f"[handle_areas] ✗ Area={areas:.1f} reached but NO intersection detected, waiting...")
 
-            # Increase left turning strength
-            self.angle_turning = 32 if self.is_turn_left_case_1 else 28
+        if areas > 800.0 and self.majority_class == 'left':
+            # CRITICAL: Check intersection BEFORE triggering turn!
+            if self.detect_intersection(segmented_image):
+                print(f"[handle_areas] ✓ LEFT turn triggered at area={areas:.1f} with intersection confirmed")
+                if self.sum_top_corner > 17_000:
+                    self.is_turn_left_case_1 = True
+                else:
+                    self.is_turn_left_case_2 = True
 
-            # Start turning and stop cal areas
-            self.is_turning = True
-            self.start_cal_area = False
+                # Increase left turning strength
+                self.angle_turning = 32 if self.is_turn_left_case_1 else 28
+
+                # Start turning and stop cal areas
+                self.is_turning = True
+                self.start_cal_area = False
+            else:
+                print(f"[handle_areas] ✗ Area={areas:.1f} reached but NO intersection detected, waiting...")
 
         if areas >= 400.0 and self.majority_class == 'no_turn_left':
-            if self.sum_right_corner > self.sum_top_corner/2:  # Turn right3
-                angle = -25
+            # CRITICAL: Check intersection BEFORE triggering
+            if self.detect_intersection(segmented_image):
+                print(f"[handle_areas] ✓ NO TURN LEFT triggered at area={areas:.1f} with intersection confirmed")
+                if self.sum_right_corner > self.sum_top_corner/2:  # Turn right
+                    angle = -25
+                else:
+                    angle = 0  # Straight
+
+                # Start turning and stop cal areas
+                self.is_turning = True
+                self.start_cal_area = False
+
+                # Set global angle
+                self.angle_turning = angle
             else:
-                angle = 0  # Straight
-
-            # Start turning and stop cal areas
-            self.is_turning = True
-            self.start_cal_area = False
-
-            # Set global angle
-            self.angle_turning = angle
+                print(f"[handle_areas] ✗ Area={areas:.1f} reached but NO intersection detected, waiting...")
 
         if areas >= 650.0 and self.majority_class == 'no right':
-            if (self.sum_left_corner > 2_000 and self.sum_top_corner < 17_500):  # \
-                #    or (self.sum_left_corner < 9_000 and self.sum_top_corner < 9_000):
+            # CRITICAL: Check intersection BEFORE triggering
+            if self.detect_intersection(segmented_image):
+                print(f"[handle_areas] ✓ NO RIGHT triggered at area={areas:.1f} with intersection confirmed")
+                if (self.sum_left_corner > 2_000 and self.sum_top_corner < 17_500):  # \
+                    #    or (self.sum_left_corner < 9_000 and self.sum_top_corner < 9_000):
 
-                if self.sum_top_corner < 3_000:  # Hard
-                    self.is_no_turn_right_case_1 = True
+                    if self.sum_top_corner < 3_000:  # Hard
+                        self.is_no_turn_right_case_1 = True
+                    else:
+                        self.is_no_turn_right_case_2 = True
+
+                    angle = 30  # Left
+
+                elif self.sum_top_corner > 18_000:
+                    self.is_no_turn_right_case_3 = True
+
+                    angle = 0  # Straight
+                    self.mask_l = True
+                    self.mask_r = True
+
                 else:
-                    self.is_no_turn_right_case_2 = True
+                    self.is_no_turn_right_case_4 = True
 
-                angle = 30  # Left
+                    angle = 0  # Straight
+                    self.mask_l = True
+                    self.mask_r = True
 
-            elif self.sum_top_corner > 18_000:
-                self.is_no_turn_right_case_3 = True
+                # Start turning and stop cal areas
+                self.is_turning = True
+                self.start_cal_area = False
 
-                angle = 0  # Straight
+                # Set global angle
+                self.angle_turning = angle
+            else:
+                print(f"[handle_areas] ✗ Area={areas:.1f} reached but NO intersection detected, waiting...")
+
+        if areas > 750.0 and self.majority_class == 'straight':
+            # CRITICAL: Check intersection BEFORE triggering
+            if self.detect_intersection(segmented_image):
+                print(f"[handle_areas] ✓ STRAIGHT triggered at area={areas:.1f} with intersection confirmed")
+                # Set global angle
+                self.angle_turning = 0
+
+                # Start turning and stop cal areas
+                self.is_turning = True
+                self.start_cal_area = False
+
                 self.mask_l = True
                 self.mask_r = True
-
             else:
-                self.is_no_turn_right_case_4 = True
+                print(f"[handle_areas] ✗ Area={areas:.1f} reached but NO intersection detected, waiting...")
 
-                angle = 0  # Straight
-                self.mask_l = True
-                self.mask_r = True
+        if areas > 600.0 and self.majority_class == 'no_straight':
+            # CRITICAL: Check intersection BEFORE triggering
+            if self.detect_intersection(segmented_image):
+                print(f"[handle_areas] ✓ NO STRAIGHT triggered at area={areas:.1f} with intersection confirmed")
+                if self.sum_left_corner > self.sum_right_corner*4:
+                    # Turn left
+                    angle = 26
+                    self.is_turn_left = True
+                else:
+                    # Turn right
+                    angle = -24
+                    self.is_turn_right = True
 
-            # Start turning and stop cal areas
-            self.is_turning = True
-            self.start_cal_area = False
+                # Start turning and stop cal areas
+                self.is_turning = True
+                self.start_cal_area = False
 
-            # Set global angle
-            self.angle_turning = angle
-
-        if areas > 580.0 and self.majority_class == 'straight':
-            # Set global angle
-            self.angle_turning = 0
-
-            # Start turning and stop cal areas
-            self.is_turning = True
-            self.start_cal_area = False
-
-            self.mask_l = True
-            self.mask_r = True
-
-        if areas > 400.0 and self.majority_class == 'no_straight':
-            if self.sum_left_corner > self.sum_right_corner*4:
-                # Turn left
-                angle = 26
-                self.is_turn_left = True
+                # Set angle and error turning
+                self.angle_turning = angle
             else:
-                # Turn right
-                angle = -24
-                self.is_turn_right = True
-
-            # Start turning and stop cal areas
-            self.is_turning = True
-            self.start_cal_area = False
-
-            # Set angle and error turning
-            self.angle_turning = angle
+                print(f"[handle_areas] ✗ Area={areas:.1f} reached but NO intersection detected, waiting...")
+                
         if areas > 380.0 and self.majority_class == 'stop':
-            # Set angle and error turning
-            self.angle_turning = 0
+            # CRITICAL: Check intersection BEFORE triggering
+            if self.detect_intersection(segmented_image):
+                print(f"[handle_areas] ✓ STOP triggered at area={areas:.1f} with intersection confirmed")
+                # Set angle and error turning
+                self.angle_turning = 0
 
-            # Start turning and stop cal areas
-            self.is_turning = True
-            self.start_cal_area = False
+                # Start turning and stop cal areas
+                self.is_turning = True
+                self.start_cal_area = False
+            else:
+                print(f"[handle_areas] ✗ Area={areas:.1f} reached but NO intersection detected, waiting...")
 
+    def get_weighted_signboard_decision(self):
+        """
+        Calculate the most confident signboard from history based on area weighting.
+        Returns the signboard label with highest weighted confidence.
+        """
+        if not self.signboard_history:
+            return None
+        
+        # Aggregate weights by label
+        label_weights = {}
+        for label, area, timestamp in self.signboard_history:
+            # Weight by area (larger = more confident) and recency
+            area_weight = (area / 100.0) ** 1.5
+            time_weight = 1.0  # Could add time decay if needed
+            weight = area_weight * time_weight
+            
+            if label not in label_weights:
+                label_weights[label] = 0
+            label_weights[label] += weight
+        
+        # Return label with highest weight
+        best_label = max(label_weights.items(), key=lambda x: x[1])
+        print(f"[get_weighted_signboard_decision] Label weights: {label_weights}, Best: {best_label[0]} (weight: {best_label[1]:.2f})")
+        return best_label[0]
+    
     def calc_areas(self, segmented_image, yolo_output):
         preds = self._safe_get_preds(yolo_output)
         print(f"[calc_areas] Looking for majority_class={self.majority_class}, got {len(preds)} predictions")
@@ -476,11 +652,30 @@ class Controller():
                     # Get boxes
                     boxes = pred[:4]
 
-                    # Calculate areas from bouding boxe
+                    # Calculate areas from bounding box
                     try:
                         areas = float(
                             max(0.0, (boxes[2] - boxes[0])) * max(0.0, (boxes[3] - boxes[1])))
-                        print(f"[calc_areas] *** MATCH! areas={areas}, boxes={boxes}")
+                        
+                        # Store this detection in signboard history with timestamp
+                        current_time = time.time()
+                        self.signboard_history.append((detected_label, areas, current_time))
+                        
+                        # Update max detected area for weighting
+                        if areas > self.max_detected_area:
+                            self.max_detected_area = areas
+                            print(f"[calc_areas] *** MATCH! label={detected_label}, areas={areas:.1f} (NEW MAX), confidence={self.signboard_confidence:.1f}")
+                        else:
+                            print(f"[calc_areas] *** MATCH! label={detected_label}, areas={areas:.1f}, max={self.max_detected_area:.1f}")
+                        
+                        # Calculate weighted confidence based on area
+                        # Larger areas get exponentially more weight (closer = more confident)
+                        area_weight = (areas / 100.0) ** 1.5  # Power scaling for emphasis
+                        self.signboard_confidence += area_weight
+                        
+                        # Store the signboard decision (will be used if boxes disappear)
+                        self.stored_signboard = detected_label
+                        
                     except Exception:
                         continue
 
