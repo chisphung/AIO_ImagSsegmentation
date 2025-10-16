@@ -1,7 +1,8 @@
 class ModelConfig:
     def __init__(self):
         # self.weights_yolo = 'pretrain/yolov8-best.pt'
-        self.weights_yolo = 'pretrain/signboard.pt'
+        # self.weights_yolo = 'pretrain/signboard.pt'
+        self.weights_yolo = 'pretrain/signboard_sizeM.pt'
         self.weights_lane = 'pretrain/segmentation_v25.pt'
 
         self.img_size = 640

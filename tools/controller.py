@@ -5,6 +5,55 @@ from utils.utils import find_majority
 
 
 class Controller():
+    """
+    Main controller for autonomous car navigation with signboard detection and intersection handling.
+    Uses a 4-state machine: COLLECTING → CONFIRMING → WAITING → TURNING
+    """
+    
+    # ==================== HYPERPARAMETERS - TUNE THESE ====================
+    
+    # Signboard Collection
+    SAMPLES_REQUIRED = 20              # Number of samples to collect before confirming signboard
+    EARLY_TRIGGER_SAMPLES = 10         # Minimum samples for early trigger if intersection detected
+    LEFT_SIGN_BOOST = 3                # Multiplier for 'left' sign detection (boost importance)
+    MIN_BBOX_AREA = 200                # Minimum bounding box area to accept detection (filter small/far signs)
+    
+    # Area Confidence Weighting
+    AREA_WEIGHT_DIVISOR = 100.0        # Divisor for area in confidence formula
+    AREA_WEIGHT_EXPONENT = 1.5         # Exponent for area weighting: (area/divisor)^exponent
+    
+    # Turning Sequence Timing
+    TURNING_MAX_FRAMES = 25            # Maximum frames for turn execution
+    
+    # Turn Angles (degrees)
+    ANGLE_RIGHT = -25                  # Right turn angle
+    ANGLE_LEFT_CASE1 = 25              # Left turn angle (case 1: top_corner > threshold)
+    ANGLE_LEFT_CASE2 = 25              # Left turn angle (case 2: default)
+    ANGLE_NO_LEFT = -25                # Angle for 'no left' sign (turn right)
+    ANGLE_NO_RIGHT = 25                # Angle for 'no right' sign (turn left)
+    ANGLE_NO_STRAIGHT_LEFT = 25        # Angle for 'no straight' sign (prefer left)
+    ANGLE_NO_STRAIGHT_RIGHT = -24      # Angle for 'no straight' sign (prefer right)
+    
+    # Corner Sum Thresholds (for turn decision logic)
+    TOP_CORNER_HIGH_THRESH = 17_000    # High threshold for top corner sum
+    TOP_CORNER_MID_THRESH = 17_500     # Mid threshold for top corner sum
+    LEFT_CORNER_THRESH = 2_000         # Threshold for left corner sum
+    
+    # Intersection Detection Parameters
+    INTERSECTION_MIN_WIDTH = 135       # Minimum lane width to detect intersection
+    INTERSECTION_LOW_HEIGHT = 45       # Starting height for width check
+    INTERSECTION_CHECK_WINDOW = 5      # Window size for consecutive height checks
+    INTERSECTION_CHECK_HEIGHT = 62     # Maximum height to check
+    INTERSECTION_TOP_THRESH = 15_000   # Threshold for top region sum
+    
+    # System Reset
+    RESET_COUNTER_LIMIT = 400          # Frames before automatic reset
+    
+    # Logging (set to False to reduce terminal output)
+    VERBOSE_LOGGING = True             # Enable detailed state transition logs
+    
+    # ==================================================================
+    
     def __init__(self):
         # Initialize variables for PID control and traffic signs detection
         # Array to store the error values for PID control
@@ -27,57 +76,43 @@ class Controller():
         #                     'straight', 'left', 'right']
         self.class_names = ['left', 'no left', 'no right', 'right', 'stop', 'straight']
 
-        # List to store the detected labels for finding majority class
-        self.stored_class_names = []
+        # Signboard Detection & Storage
+        self.stored_class_names = []       # List to store detected labels for majority voting
+        self.signboard_history = []        # List of tuples: (label, area, timestamp)
+        self.max_detected_area = 0         # Track maximum area detected
+        self.stored_signboard = None       # Latest detected signboard
+        self.signboard_confidence = 0      # Weighted confidence score
+        self.majority_class = ""           # Confirmed majority class after voting
         
-        # New: Store detected signboards with their areas for weighted decision making
-        self.signboard_history = []  # List of tuples: (label, area, timestamp)
-        self.max_detected_area = 0   # Track maximum area detected for each signboard
-        self.stored_signboard = None # The final signboard to use at intersection
-        self.signboard_confidence = 0  # Weighted confidence score
-
-        self.majority_class = ""           # Initialize the majority class to empty
-        self.start_cal_area = False        # Flag to start calculating the area for turning
-        self.turning_counter = 0           # Counter to track the number of turning frames
+        # Turning State
+        self.turning_counter = 0           # Counter to track turning frames
         self.angle_turning = 0             # Angle to turn the car
 
-        # Sum of the pixel values in the left corner of the image
+        # Corner Pixel Sums (for turn decision logic)
         self.sum_left_corner = 0
-        # Sum of the pixel values in the right corner of the image
         self.sum_right_corner = 0
-        # Sum of the pixel values in the top corner of the image
         self.sum_top_corner = 0
 
-        self.mask_l = False                # Flag to indicate mask left image
-        self.mask_r = False                # Flag to indicate mask right image
-        self.mask_lr = False               # Flag to indicate mask leftn and right image
-        self.mask_t = False                # Flag to indicate mask top image
+        # Image Masking Flags
+        self.mask_l = False                # Mask left side of image
+        self.mask_r = False                # Mask right side of image
+        self.mask_lr = False               # Mask both left and right
+        self.mask_t = False                # Mask top of image
 
-        # Flag to indicate the next step of the car when turning
-        self.next_step = False
-        self.is_turning = False            # Flag to indicate if the car is currently turning
+        # State Machine Flags
+        self.next_step = False             # Next step flag for turning
+        self.is_turning = False            # Currently executing turn
+        self.waiting_for_intersection = False  # Waiting for intersection after signboard confirmed
+        self.intersection_detected = False # Intersection detected flag (set by calc_error)
 
-        # Counter to track the number of frames since the last reset
+        # Turn Type Flags (set during _apply_signboard_decision)
+        self.is_turn_left_case_1 = False   # Left turn case 1 (high top corner)
+        self.is_turn_left_case_2 = False   # Left turn case 2 (default)
+        self.is_no_turn_right_case_1 = False  # No right case 1 (turn left)
+        self.is_no_turn_right_case_2 = False  # No right case 2 (go straight)
+
+        # System Reset Counter
         self.reset_counter = 0
-
-        self.is_turn_left = False          # Flag to indicate if the car is turning left
-        self.is_turn_right = False         # Flag to indicate if the car is turning right
-        self.is_straight = False           # Flag to indicate if the car is going straight
-
-        # Flag to indicate if there is a "no turn right" sign in case 1
-        self.is_no_turn_right_case_1 = False
-        self.is_no_turn_right_case_2 = False    # Flag for case 2
-        self.is_no_turn_right_case_3 = False    # Flag for case 3
-        self.is_no_turn_right_case_4 = False    # Flag for case 4
-
-        # Flag to indicate if there is a "turn left" sign in case 1
-        self.is_turn_left_case_1 = False
-        self.is_turn_left_case_2 = False        # Flag for case 2
-
-        self.intersection_detected = False
-        
-        # NEW: State for "waiting for intersection after signboard confirmed"
-        self.waiting_for_intersection = False
 
         # Lane tracking helpers for robustness in sharp turns
         self.last_center_right_lane = None
@@ -132,86 +167,85 @@ class Controller():
         return int(sum_left), int(sum_right), int(sum_top)
 
     def reset(self):
-        # Reset all values to default values
-        self.turning_counter = 0
-        self.majority_class = ""
-        self.start_cal_area = False
+        """Reset all state variables to default values after turn completion or timeout."""
+        # Signboard Detection
         self.stored_class_names = []
-        
-        # Reset signboard history and stored decision
         self.signboard_history = []
         self.max_detected_area = 0
         self.stored_signboard = None
         self.signboard_confidence = 0
-        
-        # Reset intersection waiting state
-        self.waiting_for_intersection = False
-
-        self.mask_lr = False
-        self.mask_l = False
-        self.mask_r = False
-        self.mask_t = False
-
         self.majority_class = ""
-        self.start_cal_area = False
+        
+        # State Machine
+        self.waiting_for_intersection = False
+        self.intersection_detected = False
+        self.is_turning = False
+        self.next_step = False
+        
+        # Turning State
         self.turning_counter = 0
         self.angle_turning = 0
-
-        self.next_step = False
-        self.is_turning = False
-
-        self.reset_counter = 0
-
-        self.is_turn_left = False
-        self.is_turn_right = False
-        self.is_straight = False
-
-        self.is_no_turn_right_case_1 = False
-        self.is_no_turn_right_case_2 = False
-        self.is_no_turn_right_case_3 = False
-        self.is_no_turn_right_case_4 = False
-
+        
+        # Turn Type Flags
         self.is_turn_left_case_1 = False
         self.is_turn_left_case_2 = False
-
-        self.intersection_detected = False
-
-        # Reset lane tracking helpers
+        self.is_no_turn_right_case_1 = False
+        self.is_no_turn_right_case_2 = False
+        
+        # Image Masking
+        self.mask_l = False
+        self.mask_r = False
+        self.mask_lr = False
+        self.mask_t = False
+        
+        # Reset counter
+        self.reset_counter = 0
+        
+        # Lane tracking
         self.last_center_right_lane = None
         self.lost_lane_frames = 0
         self.prev_error = 0.0
 
     def control(self, segmented_image, yolo_output):
+        """
+        Main control loop implementing the 4-state machine:
+        1. TURNING - Execute turn sequence
+        2. WAITING - Monitor for intersection after signboard confirmed
+        3. COLLECTING - Gather signboard samples
+        4. CONFIRMING - Vote on majority and enter waiting state
+        """
         # Safety reset after many frames to avoid stale state
-        if self.reset_counter >= 200:
+        if self.reset_counter >= self.RESET_COUNTER_LIMIT:
+            print(f"[control] 🔄 Auto-reset after {self.reset_counter} frames")
             self.reset()
 
         # Calculate area of left, right, and top corner of the segmented image
         self.sum_left_corner, self.sum_right_corner, self.sum_top_corner = self._compute_region_sums(
             segmented_image)
 
-        # Debug flags can be re-enabled if needed
-
-        # ==================== NEW CLEAN STATE MACHINE ====================
-        # State 1: Currently turning - execute turn sequence
+        # ==================== 4-STATE MACHINE ====================
+        
+        # State 1: TURNING - Execute turn sequence
         if self.is_turning:
             self.handle_turning()
         
-        # State 2: Waiting for intersection after signboard confirmed
+        # State 2: WAITING - Monitor for intersection after signboard confirmed
         elif self.waiting_for_intersection:
-            print(f"[control] 🔍 Waiting for intersection... (signboard: {self.majority_class})")
+            if self.VERBOSE_LOGGING:
+                print(f"[control] 🔍 Waiting for intersection... (signboard: {self.majority_class})")
             
-            # Check if intersection detected (by calc_error or current frame)
+            # Check if intersection detected (by calc_error OR current frame)
             if self.intersection_detected or self.detect_intersection(segmented_image):
-                print(f"[control] ✓ INTERSECTION REACHED! Applying signboard: {self.majority_class}")
+                if self.VERBOSE_LOGGING:
+                    print(f"[control] ✓ INTERSECTION REACHED! Applying signboard: {self.majority_class}")
                 self.intersection_detected = True
                 self.waiting_for_intersection = False
                 
                 # Apply the stored signboard decision
                 self._apply_signboard_decision()
         
-        # State 3: Collecting signboard samples (< 30 samples)
-        elif len(self.stored_class_names) < 30:
+        # State 3: COLLECTING - Gather signboard samples (< SAMPLES_REQUIRED)
+        elif len(self.stored_class_names) < self.SAMPLES_REQUIRED:
             preds = self._safe_get_preds(yolo_output)
             
             for pred in preds:
@@ -221,43 +255,47 @@ class Controller():
                     continue
                 if class_id < 0 or class_id >= len(self.class_names):
                     continue
+                
+                # Calculate bounding box area and skip if too small
+                boxes = pred[:4]
+                try:
+                    bbox_area = float(max(0.0, (boxes[2] - boxes[0])) * max(0.0, (boxes[3] - boxes[1])))
+                    if bbox_area < self.MIN_BBOX_AREA:
+                        if self.VERBOSE_LOGGING:
+                            print(f"[control] ⏭️  Skipping detection with small area: {bbox_area:.1f} < {self.MIN_BBOX_AREA}")
+                        continue
+                except Exception:
+                    continue
+                
                 label = self.class_names[class_id]
                 if label in self.traffic_lights:
                     self.stored_class_names.append(label)
-                    print(f"[control] 📝 Added sign '{label}' to stored list (count={len(self.stored_class_names)})")
+                    if self.VERBOSE_LOGGING:
+                        print(f"[control] 📝 Added sign '{label}' to stored list (count={len(self.stored_class_names)})")
                     
                     # Store in signboard history with area for weighting
-                    boxes = pred[:4]
                     try:
-                        areas = float(max(0.0, (boxes[2] - boxes[0])) * max(0.0, (boxes[3] - boxes[1])))
+                        areas = bbox_area  # Reuse the calculated area
                         current_time = time.time()
                         self.signboard_history.append((label, areas, current_time))
                         if areas > self.max_detected_area:
                             self.max_detected_area = areas
-                        area_weight = (areas / 100.0) ** 1.5
+                        # Apply area weighting formula from hyperparameters
+                        area_weight = (areas / self.AREA_WEIGHT_DIVISOR) ** self.AREA_WEIGHT_EXPONENT
                         self.signboard_confidence += area_weight
                         self.stored_signboard = label
-                        print(f"[control] 💾 Stored: {label}, area={areas:.1f}, confidence={self.signboard_confidence:.1f}")
+                        if self.VERBOSE_LOGGING:
+                            print(f"[control] 💾 Stored: {label}, area={areas:.1f}, confidence={self.signboard_confidence:.1f}")
                     except Exception:
                         pass
 
-                if label == 'left':
-                    self.stored_class_names.extend(['left']*3)
-                    print(f"[control] 📊 Boosted 'left' sign (count={len(self.stored_class_names)})")
-            
-            # # Check for early trigger: 10+ samples AND intersection already visible
-            # if len(self.stored_class_names) >= 10 and (self.intersection_detected or self.detect_intersection(segmented_image)):
-            #     print(f"[control] ⚡ EARLY TRIGGER: Intersection detected with {len(self.stored_class_names)} samples!")
-            #     self.majority_class = find_majority(self.stored_class_names)[0]
-            #     print(f"[control] 📋 Early majority class: {self.majority_class}")
-            #     self.waiting_for_intersection = True  # Enter intersection waiting loop
-                
-        # State 4: 30+ samples collected, determine majority and start waiting for intersection
-        elif len(self.stored_class_names) >= 30:
+        # State 4: CONFIRMING - Samples collected, determine majority and enter waiting
+        elif len(self.stored_class_names) >= self.SAMPLES_REQUIRED:
             # Determine the majority class from collected samples
             self.majority_class = find_majority(self.stored_class_names)[0]
-            print(f"[control] ✅ Signboard confirmed: {self.majority_class} (from {len(self.stored_class_names)} samples)")
-            print(f"[control] 🔍 Now waiting for intersection...")
+            if self.VERBOSE_LOGGING:
+                print(f"[control] ✅ Signboard confirmed: {self.majority_class} (from {len(self.stored_class_names)} samples)")
+                print("[control] 🔍 Now waiting for intersection...")
             
             # Enter intersection waiting state
             self.waiting_for_intersection = True
@@ -270,23 +308,28 @@ class Controller():
         """
         Apply the stored majority_class signboard decision by setting turn parameters.
         This method is called when intersection is reached after signboard is confirmed.
+        Uses hyperparameters for angles and thresholds.
         """
-        print(f"[_apply_signboard_decision] Applying: {self.majority_class}")
+        if self.VERBOSE_LOGGING:
+            print(f"[_apply_signboard_decision] Applying: {self.majority_class}")
         
         if self.majority_class == 'right':
-            self.angle_turning = -25
+            self.angle_turning = self.ANGLE_RIGHT
             self.is_turning = True
-            print("[_apply_signboard_decision] → RIGHT TURN (-25°)")
+            if self.VERBOSE_LOGGING:
+                print(f"[_apply_signboard_decision] → RIGHT TURN ({self.ANGLE_RIGHT}°)")
             
         elif self.majority_class == 'left':
-            if self.sum_top_corner > 17_000:
-                self.angle_turning = 32
+            if self.sum_top_corner > self.TOP_CORNER_HIGH_THRESH:
+                self.angle_turning = self.ANGLE_LEFT_CASE1
                 self.is_turn_left_case_1 = True
-                print("[_apply_signboard_decision] → LEFT TURN Case 1 (32°)")
+                if self.VERBOSE_LOGGING:
+                    print(f"[_apply_signboard_decision] → LEFT TURN Case 1 ({self.ANGLE_LEFT_CASE1}°)")
             else:
-                self.angle_turning = 28
+                self.angle_turning = self.ANGLE_LEFT_CASE2
                 self.is_turn_left_case_2 = True
-                print("[_apply_signboard_decision] → LEFT TURN Case 2 (28°)")
+                if self.VERBOSE_LOGGING:
+                    print(f"[_apply_signboard_decision] → LEFT TURN Case 2 ({self.ANGLE_LEFT_CASE2}°)")
             self.is_turning = True
             
         elif self.majority_class == 'straight':
@@ -294,55 +337,63 @@ class Controller():
             self.is_turning = True
             self.mask_l = True
             self.mask_r = True
-            print("[_apply_signboard_decision] → STRAIGHT (0°, mask L+R)")
+            if self.VERBOSE_LOGGING:
+                print("[_apply_signboard_decision] → STRAIGHT (0°, mask L+R)")
             
         elif self.majority_class == 'no right':
-            if self.sum_left_corner > 2_000 and self.sum_top_corner < 17_500:
-                self.angle_turning = 30
+            if self.sum_left_corner > self.LEFT_CORNER_THRESH and self.sum_top_corner < self.TOP_CORNER_MID_THRESH:
+                self.angle_turning = self.ANGLE_NO_RIGHT
                 self.is_no_turn_right_case_1 = True
-                print("[_apply_signboard_decision] → NO RIGHT: Turn left (30°)")
+                if self.VERBOSE_LOGGING:
+                    print(f"[_apply_signboard_decision] → NO RIGHT: Turn left ({self.ANGLE_NO_RIGHT}°)")
             else:
                 self.angle_turning = 0
                 self.mask_l = True
                 self.mask_r = True
                 self.is_no_turn_right_case_2 = True
-                print("[_apply_signboard_decision] → NO RIGHT: Go straight (mask L+R)")
+                if self.VERBOSE_LOGGING:
+                    print("[_apply_signboard_decision] → NO RIGHT: Go straight (mask L+R)")
             self.is_turning = True
             
         elif self.majority_class == 'stop':
             self.angle_turning = 0
             self.is_turning = True
-            print("[_apply_signboard_decision] → STOP (0°)")
+            if self.VERBOSE_LOGGING:
+                print("[_apply_signboard_decision] → STOP (0°)")
             
         elif self.majority_class == 'no left':
-            if self.sum_right_corner > self.sum_top_corner/2:
-                self.angle_turning = -25
-                print("[_apply_signboard_decision] → NO LEFT: Turn right (-25°)")
+            if self.sum_right_corner > self.sum_top_corner / 2:
+                self.angle_turning = self.ANGLE_NO_LEFT
+                if self.VERBOSE_LOGGING:
+                    print(f"[_apply_signboard_decision] → NO LEFT: Turn right ({self.ANGLE_NO_LEFT}°)")
             else:
                 self.angle_turning = 0
-                print("[_apply_signboard_decision] → NO LEFT: Go straight (0°)")
+                if self.VERBOSE_LOGGING:
+                    print("[_apply_signboard_decision] → NO LEFT: Go straight (0°)")
             self.is_turning = True
             
         elif self.majority_class == 'no_straight':
-            if self.sum_left_corner > self.sum_right_corner*4:
-                self.angle_turning = 26
-                print("[_apply_signboard_decision] → NO STRAIGHT: Turn left (26°)")
+            if self.sum_left_corner > self.sum_right_corner * 4:
+                self.angle_turning = self.ANGLE_NO_STRAIGHT_LEFT
+                if self.VERBOSE_LOGGING:
+                    print(f"[_apply_signboard_decision] → NO STRAIGHT: Turn left ({self.ANGLE_NO_STRAIGHT_LEFT}°)")
             else:
-                self.angle_turning = -24
-                print("[_apply_signboard_decision] → NO STRAIGHT: Turn right (-24°)")
+                self.angle_turning = self.ANGLE_NO_STRAIGHT_RIGHT
+                if self.VERBOSE_LOGGING:
+                    print(f"[_apply_signboard_decision] → NO STRAIGHT: Turn right ({self.ANGLE_NO_STRAIGHT_RIGHT}°)")
             self.is_turning = True
             
         else:
-            print(f"[_apply_signboard_decision] ⚠️ Unhandled class: {self.majority_class}")
+            if self.VERBOSE_LOGGING:
+                print(f"[_apply_signboard_decision] ⚠️ Unhandled class: {self.majority_class}")
 
     def handle_turning(self):
-        # Default config
+        """Execute the turn sequence based on turn type and counter."""
         speed = 0
         angle = 0
 
-        # Check turning counter
-        MAX_COUNTER = 25
-        if self.turning_counter < MAX_COUNTER:
+        # Check turning counter against hyperparameter
+        if self.turning_counter < self.TURNING_MAX_FRAMES:
             if self.majority_class == 'left':
                 if self.is_turn_left_case_1:
                     speed = 0
@@ -351,15 +402,15 @@ class Controller():
                     elif self.turning_counter > 3 and self.turning_counter <= 6:
                         angle = self.angle_turning
                     else:
-                        self.turning_counter = MAX_COUNTER
+                        self.turning_counter = self.TURNING_MAX_FRAMES
                 elif self.is_turn_left_case_2:
                     speed = 0
                     if self.turning_counter <= 1:
-                        angle = 5
+                        angle = 25
                     elif self.turning_counter > 1 and self.turning_counter <= 6:
                         angle = self.angle_turning
                     else:
-                        self.turning_counter = MAX_COUNTER
+                        self.turning_counter = self.TURNING_MAX_FRAMES
 
             elif self.majority_class == 'right':
                 speed = 0
@@ -368,7 +419,7 @@ class Controller():
                 if self.turning_counter >= 0 and self.turning_counter < 7:
                     angle = self.angle_turning
                 else:
-                    self.turning_counter = MAX_COUNTER
+                    self.turning_counter = self.TURNING_MAX_FRAMES
 
             elif self.majority_class == 'no left':
                 speed = 0
@@ -377,7 +428,7 @@ class Controller():
                 elif self.turning_counter > 1 and self.turning_counter <= 5:
                     angle = -25
                 else:
-                    self.turning_counter = MAX_COUNTER
+                    self.turning_counter = self.TURNING_MAX_FRAMES
 
             elif self.majority_class == 'no right':
                 if self.is_no_turn_right_case_1:    # Left hard
@@ -387,7 +438,7 @@ class Controller():
                     elif self.turning_counter > 1 and self.turning_counter <= 7:
                         angle = self.angle_turning
                     else:
-                        self.turning_counter = MAX_COUNTER
+                        self.turning_counter = self.TURNING_MAX_FRAMES
                 elif self.is_no_turn_right_case_2:  # Left
                     speed = 0
                     if self.turning_counter <= 1:
@@ -395,26 +446,26 @@ class Controller():
                     elif self.turning_counter > 1 and self.turning_counter <= 6:
                         angle = self.angle_turning
                     else:
-                        self.turning_counter = MAX_COUNTER
+                        self.turning_counter = self.TURNING_MAX_FRAMES
                 elif self.is_no_turn_right_case_3:  # Straight (left of map)
                     speed = 0
                     if self.turning_counter <= 9:
                         angle = self.angle_turning
                     else:
-                        self.turning_counter = MAX_COUNTER
+                        self.turning_counter = self.TURNING_MAX_FRAMES
                 else:   # Straight: self.is_no_turn_right_case_4
                     speed = 0
                     if self.turning_counter <= 9:
                         angle = self.angle_turning
                     else:
-                        self.turning_counter = MAX_COUNTER
+                        self.turning_counter = self.TURNING_MAX_FRAMES
 
             elif self.majority_class == 'straight':
                 speed = 0
                 if self.turning_counter <= 9:
                     angle = self.angle_turning
                 else:
-                    self.turning_counter = MAX_COUNTER
+                    self.turning_counter = self.TURNING_MAX_FRAMES
 
             elif self.majority_class == 'no_straight':
                 if self.is_turn_left:  # Left
@@ -424,7 +475,7 @@ class Controller():
                     elif self.turning_counter > 1 and self.turning_counter <= 5:
                         angle = self.angle_turning
                     else:
-                        self.turning_counter = MAX_COUNTER
+                        self.turning_counter = self.TURNING_MAX_FRAMES
                 else:  # Right
                     speed = 0
                     if self.turning_counter <= 1:
@@ -432,7 +483,7 @@ class Controller():
                     elif self.turning_counter > 1 and self.turning_counter <= 5:
                         angle = self.angle_turning
                     else:
-                        self.turning_counter = MAX_COUNTER
+                        self.turning_counter = self.TURNING_MAX_FRAMES
             elif self.majority_class == 'stop':
 
                 if self.turning_counter <= 3:
@@ -442,14 +493,14 @@ class Controller():
                     speed = 0
                     angle = self.angle_turning
                 else:
-                    self.turning_counter = MAX_COUNTER
+                    self.turning_counter = self.TURNING_MAX_FRAMES
 
             elif self.angle_turning == 20:  # Forced left turn at intersection
                 speed = 20  # Higher speed to pass quickly
                 if self.turning_counter <= 30:  # Hold for longer
                     angle = self.angle_turning
                 else:
-                    self.turning_counter = MAX_COUNTER
+                    self.turning_counter = self.TURNING_MAX_FRAMES
 
             # Set default speed
             if speed == 0:
@@ -465,7 +516,7 @@ class Controller():
             # Send back to not use PID calculate again when turning
             self.next_step = True
 
-        elif self.turning_counter >= MAX_COUNTER:
+        elif self.turning_counter >= self.TURNING_MAX_FRAMES:
             # Reset after turning
             self.reset()
 
@@ -687,39 +738,52 @@ class Controller():
             print("[calc_areas] Exception during prediction processing")
             pass
 
-    def detect_intersection(self, image, low_height=48, low_window=5, check_height=62, min_width=140, top_thresh=15000):
-        # Scan lower band, then verify with upper band
-        try:
-            print(
-                f"[detect_intersection] params: low_height={low_height}, window={low_window}, check_height={check_height}, min_width={min_width}, top_thresh={top_thresh}")
-        except Exception:
-            pass
+    def detect_intersection(self, image, 
+                          low_height=None, low_window=None, check_height=None, 
+                          min_width=None, top_thresh=None):
+        """
+        Detect intersection by checking lane width at multiple heights.
+        Uses hyperparameters by default, but allows override for testing.
+        """
+        # Use hyperparameters if not specified
+        low_height = low_height if low_height is not None else self.INTERSECTION_LOW_HEIGHT
+        low_window = low_window if low_window is not None else self.INTERSECTION_CHECK_WINDOW
+        check_height = check_height if check_height is not None else self.INTERSECTION_CHECK_HEIGHT
+        min_width = min_width if min_width is not None else self.INTERSECTION_MIN_WIDTH
+        top_thresh = top_thresh if top_thresh is not None else self.INTERSECTION_TOP_THRESH
+        
+        if self.VERBOSE_LOGGING:
+            print(f"[detect_intersection] params: low_height={low_height}, window={low_window}, "
+                  f"check_height={check_height}, min_width={min_width}, top_thresh={top_thresh}")
+        
         for h in range(low_height, low_height + low_window):
             arr = [x for x, y in enumerate(image[h, :]) if y[0] == 255]
             if len(arr) > 0 and max(arr) - min(arr) > 50:
                 # Check upper band
                 lineRow = image[min(check_height, image.shape[0]-1), :]
                 arr2 = [x for x, y in enumerate(lineRow) if y[0] == 255]
-                # dynamic top-center sum
+                # Dynamic top-center sum
                 _, _, sum_top = self._compute_region_sums(image)
-                try:
+                
+                if self.VERBOSE_LOGGING:
                     low_width = (max(arr) - min(arr)) if len(arr) > 0 else 0
                     up_width = (max(arr2) - min(arr2)) if len(arr2) > 0 else 0
-                    print(
-                        f"[detect_intersection] candidate at h={h}: low_width={low_width}, up_width={up_width}, sum_top={sum_top}")
-                except Exception:
-                    pass
+                    print(f"[detect_intersection] candidate at h={h}: low_width={low_width}, "
+                          f"up_width={up_width}, sum_top={sum_top}")
 
                 if len(arr2) > 0 and max(arr2) - min(arr2) > min_width and sum_top < top_thresh:
-                    print("[detect_intersection] Intersection confirmed!")
+                    if self.VERBOSE_LOGGING:
+                        print("[detect_intersection] Intersection confirmed!")
                     return True
 
-        print("[detect_intersection] No intersection")
+        if self.VERBOSE_LOGGING:
+            print("[detect_intersection] No intersection")
         return False
 
     def calc_error(self, image):
         """
         Calculates the error between the center of the right lane and the center of the image.
+        Only checks for intersections if a signboard has been detected (waiting_for_intersection=True).
         """
 
         arr = []
@@ -730,7 +794,8 @@ class Controller():
             if y[0] == 255:
                 arr.append(x)
 
-        if self.detect_intersection(image):
+        # Only check for intersection if we're waiting for one (signboard detected)
+        if self.waiting_for_intersection and self.detect_intersection(image):
             print("[calc_error] intersection detected")
             self.intersection_detected = True
             return 0

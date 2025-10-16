@@ -1,0 +1,142 @@
+╔═══════════════════════════════════════════════════════════════════╗
+║           🎯 HYPERPARAMETER TUNING - QUICK REFERENCE             ║
+╚═══════════════════════════════════════════════════════════════════╝
+
+📍 LOCATION: tools/controller.py (top of Controller class)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+                    COMMON TUNING SCENARIOS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+❌ TURNS TOO EARLY:
+   • INTERSECTION_MIN_WIDTH: 140 → 150-160
+   • SAMPLES_REQUIRED: 30 → 35-40
+
+❌ MISSES INTERSECTIONS:
+   • INTERSECTION_MIN_WIDTH: 140 → 120-130
+   • EARLY_TRIGGER_SAMPLES: 10 → 8-12
+   • INTERSECTION_TOP_THRESH: 15000 → 16000-18000
+
+❌ TURNS TOO SHARP:
+   • ANGLE_RIGHT: -25 → -20 to -22
+   • ANGLE_LEFT_CASE1: 32 → 28-30
+
+❌ TURNS TOO GENTLE:
+   • ANGLE_RIGHT: -25 → -28 to -30
+   • ANGLE_LEFT_CASE1: 32 → 35-38
+   • TURNING_MAX_FRAMES: 25 → 28-30
+
+❌ WRONG SIGNBOARD:
+   • SAMPLES_REQUIRED: 30 → 35-40
+   • AREA_WEIGHT_EXPONENT: 1.5 → 2.0
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+                      KEY PARAMETERS (DEFAULTS)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📝 SIGNBOARD COLLECTION:
+   SAMPLES_REQUIRED              = 30   (25-35 recommended)
+   EARLY_TRIGGER_SAMPLES         = 10   (8-15 recommended)
+   LEFT_SIGN_BOOST               = 3    (2-4 recommended)
+
+🔢 AREA WEIGHTING:
+   AREA_WEIGHT_DIVISOR           = 100.0
+   AREA_WEIGHT_EXPONENT          = 1.5  (1.2-2.0 recommended)
+
+⏱️ TIMING:
+   TURNING_MAX_FRAMES            = 25   (20-30 recommended)
+   RESET_COUNTER_LIMIT           = 200
+
+🎯 TURN ANGLES:
+   ANGLE_RIGHT                   = -25  (-30 to -20)
+   ANGLE_LEFT_CASE1              = 32   (28-35)
+   ANGLE_LEFT_CASE2              = 28   (25-32)
+   ANGLE_NO_RIGHT                = 30   (25-35)
+   ANGLE_NO_LEFT                 = -25  (-30 to -20)
+
+🚦 INTERSECTION DETECTION:
+   INTERSECTION_MIN_WIDTH        = 140  (120-160)
+   INTERSECTION_LOW_HEIGHT       = 48   (45-55)
+   INTERSECTION_CHECK_WINDOW     = 5    (3-7)
+   INTERSECTION_CHECK_HEIGHT     = 62   (58-70)
+   INTERSECTION_TOP_THRESH       = 15000 (12000-18000)
+
+🔍 THRESHOLDS:
+   TOP_CORNER_HIGH_THRESH        = 17000
+   TOP_CORNER_MID_THRESH         = 17500
+   LEFT_CORNER_THRESH            = 2000
+
+🔊 LOGGING:
+   VERBOSE_LOGGING               = True (False for production)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+                         TUNING TIPS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✅ Change ONE parameter at a time
+✅ Small adjustments (±10%) work best
+✅ Test 2-3 laps per change
+✅ Keep notes on what works
+✅ Backup before major changes
+
+❌ Don't change multiple parameters at once
+❌ Avoid large jumps (>25% change)
+❌ Don't tune without testing
+❌ Don't forget to document changes
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+                      QUICK WORKFLOW
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. Identify problem (which turn/intersection?)
+2. Open tools/controller.py
+3. Find relevant parameter in HYPERPARAMETERS section
+4. Adjust value (small change first)
+5. Save file
+6. Run: python main.py
+7. Test 2-3 laps
+8. Document result
+9. Repeat if needed
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+                       BACKUP & RESTORE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Backup before tuning:
+   cp tools/controller.py tools/controller.py.backup
+
+Restore if needed:
+   cp tools/controller.py.backup tools/controller.py
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+                      LOG MESSAGES TO WATCH
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📝 "Added sign 'X' to stored list (count=N)"
+   → Collecting samples (should reach 30)
+
+✅ "Signboard confirmed: X (from N samples)"
+   → Majority determined, entering waiting state
+
+🔍 "Waiting for intersection... (signboard: X)"
+   → Monitoring for intersection
+
+✓ "INTERSECTION REACHED! Applying signboard: X"
+   → Intersection detected, applying decision
+
+→ "RIGHT TURN (-25°)" / "LEFT TURN (32°)"
+   → Turn parameters set
+
+"Angle: -25" in Next step output
+   → Turn executing
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📚 For detailed explanations:
+   See: HYPERPARAMETER_TUNING_GUIDE.md
+
+🧹 For code cleanup details:
+   See: CODE_CLEANUP_SUMMARY.md
+
+🚀 Happy tuning!
+
