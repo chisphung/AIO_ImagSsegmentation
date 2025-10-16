@@ -40,11 +40,11 @@ class Controller():
     LEFT_CORNER_THRESH = 2_000         # Threshold for left corner sum
     
     # Intersection Detection Parameters
-    INTERSECTION_MIN_WIDTH = 135       # Minimum lane width to detect intersection
-    INTERSECTION_LOW_HEIGHT = 45       # Starting height for width check
+    INTERSECTION_MIN_WIDTH = 95       # Minimum lane width to detect intersection
+    INTERSECTION_LOW_HEIGHT = 50       # Starting height for width check
     INTERSECTION_CHECK_WINDOW = 5      # Window size for consecutive height checks
     INTERSECTION_CHECK_HEIGHT = 62     # Maximum height to check
-    INTERSECTION_TOP_THRESH = 15_000   # Threshold for top region sum
+    # INTERSECTION_TOP_THRESH = 15_000   # Threshold for top region sum
     
     # System Reset
     RESET_COUNTER_LIMIT = 400          # Frames before automatic reset
@@ -136,33 +136,48 @@ class Controller():
             return np.empty((0, 6), dtype=float)
 
     def _compute_region_sums(self, img):
-        """Compute dynamic region sums used by logic, with bounds checks."""
+        """
+        Compute region sums from segmented image.
+        NOTE: Top corners often have no road (black), so sums may be 0.
+        Instead, check regions LOWER in the image where road is more visible.
+        """
         try:
             h, w = img.shape[0], img.shape[1]
-        except Exception:
+        except Exception as e:
+            print(f"[ERROR] Invalid image shape for region sums: {e}")
             return 0, 0, 0
 
-        # Define window sizes with bounds
-        left_w = min(24, max(1, w // 10))
-        left_h = min(24, max(1, h // 10))
-        right_w = min(50, max(1, w // 8))
-        right_h = min(50, max(1, h // 8))
-        top_h = min(24, max(1, h // 10))
-        center_w = min(50, max(10, w // 5))
+        # Check image shape and content
+        if len(img.shape) < 3:
+            print(f"[ERROR] Image has wrong dimensions: {img.shape}, expected 3 channels")
+            return 0, 0, 0
 
-        # Left top corner
-        sum_left = np.sum(img[:left_h, :left_w, 0]) if h > 0 and w > 0 else 0
-
-        # Right top corner
-        sum_right = np.sum(
-            img[:right_h, max(0, w - right_w):, 0]) if w > 0 else 0
-
-        # Top center window
-        mid = w // 2
-        half = center_w // 2
-        l = max(0, mid - half)
-        r = min(w, mid + half)
-        sum_top = np.sum(img[:top_h, l:r, 0]) if r > l else 0
+        # Instead of top corners (which are often black), check LOWER regions where road is visible
+        # Use middle section of image where road is typically segmented
+        
+        # For 80x160 image: check around row 40-60 (middle to lower area)
+        check_row_start = max(0, int(h * 0.5))  # Start at 50% height
+        check_row_end = min(h, int(h * 0.75))    # End at 75% height
+        
+        # Left side (left 30% of width)
+        left_col_end = int(w * 0.3)
+        sum_left = np.sum(img[check_row_start:check_row_end, :left_col_end, 0])
+        
+        # Right side (right 30% of width)  
+        right_col_start = int(w * 0.7)
+        sum_right = np.sum(img[check_row_start:check_row_end, right_col_start:, 0])
+        
+        # Center (middle 40% of width)
+        center_col_start = int(w * 0.3)
+        center_col_end = int(w * 0.7)
+        sum_top = np.sum(img[check_row_start:check_row_end, center_col_start:center_col_end, 0])
+        
+        # Debug logging
+        if self.waiting_for_intersection or self.intersection_detected:
+            print(f"[_compute_region_sums] Image: {h}x{w}, checking rows {check_row_start}-{check_row_end}")
+            print(f"[_compute_region_sums] Left (cols 0-{left_col_end}): {int(sum_left)}")
+            print(f"[_compute_region_sums] Right (cols {right_col_start}-{w}): {int(sum_right)}")
+            print(f"[_compute_region_sums] Center (cols {center_col_start}-{center_col_end}): {int(sum_top)}")
 
         return int(sum_left), int(sum_right), int(sum_top)
 
@@ -341,12 +356,25 @@ class Controller():
                 print("[_apply_signboard_decision] → STRAIGHT (0°, mask L+R)")
             
         elif self.majority_class == 'no right':
-            if self.sum_left_corner > self.LEFT_CORNER_THRESH and self.sum_top_corner < self.TOP_CORNER_MID_THRESH:
+            print(f"[DEBUG NO RIGHT] sum_left: {self.sum_left_corner}, sum_top: {self.sum_top_corner}")
+            print(f"[DEBUG NO RIGHT] LEFT_CORNER_THRESH: {self.LEFT_CORNER_THRESH}, TOP_CORNER_MID_THRESH: {self.TOP_CORNER_MID_THRESH}")
+            
+            # Check if corner sums are valid (not all zeros)
+            if self.sum_left_corner == 0 and self.sum_top_corner == 0 and self.sum_right_corner == 0:
+                # Fallback: No road detected in corners, default to LEFT for "no right"
+                print("[DEBUG NO RIGHT] ⚠️ All corner sums are 0! Using fallback: TURN LEFT")
+                self.angle_turning = self.ANGLE_NO_RIGHT  # Turn left
+                self.is_no_turn_right_case_1 = True
+                if self.VERBOSE_LOGGING:
+                    print(f"[_apply_signboard_decision] → NO RIGHT (FALLBACK): Turn left ({self.ANGLE_NO_RIGHT}°)")
+            elif self.sum_left_corner > self.LEFT_CORNER_THRESH and self.sum_top_corner < self.TOP_CORNER_MID_THRESH:
+                # Normal case: left corner has road, top doesn't → turn left
                 self.angle_turning = self.ANGLE_NO_RIGHT
                 self.is_no_turn_right_case_1 = True
                 if self.VERBOSE_LOGGING:
                     print(f"[_apply_signboard_decision] → NO RIGHT: Turn left ({self.ANGLE_NO_RIGHT}°)")
             else:
+                # Go straight
                 self.angle_turning = 0
                 self.mask_l = True
                 self.mask_r = True
@@ -362,14 +390,20 @@ class Controller():
                 print("[_apply_signboard_decision] → STOP (0°)")
             
         elif self.majority_class == 'no left':
-            if self.sum_right_corner > self.sum_top_corner / 2:
-                self.angle_turning = self.ANGLE_NO_LEFT
-                if self.VERBOSE_LOGGING:
-                    print(f"[_apply_signboard_decision] → NO LEFT: Turn right ({self.ANGLE_NO_LEFT}°)")
-            else:
+            print(f"[DEBUG NO LEFT] sum_right: {self.sum_right_corner}, sum_top: {self.sum_top_corner}, sum_left: {self.sum_left_corner}")
+            
+            # For "no left" sign: Default is to turn RIGHT (since we can't go left)
+            # Only go straight if there's significantly more road ahead than on the right
+            if self.sum_top_corner > self.sum_right_corner * 2:
+                # Lots of road ahead, minimal on right → go straight
                 self.angle_turning = 0
                 if self.VERBOSE_LOGGING:
-                    print("[_apply_signboard_decision] → NO LEFT: Go straight (0°)")
+                    print(f"[_apply_signboard_decision] → NO LEFT: Go straight (0°) [top={self.sum_top_corner} > right*2={self.sum_right_corner*2}]")
+            else:
+                # Right has decent road or not much straight ahead → turn right
+                self.angle_turning = self.ANGLE_NO_LEFT
+                if self.VERBOSE_LOGGING:
+                    print(f"[_apply_signboard_decision] → NO LEFT: Turn right ({self.ANGLE_NO_LEFT}°) [top={self.sum_top_corner} <= right*2={self.sum_right_corner*2}]")
             self.is_turning = True
             
         elif self.majority_class == 'no_straight':
@@ -462,7 +496,7 @@ class Controller():
 
             elif self.majority_class == 'straight':
                 speed = 0
-                if self.turning_counter <= 9:
+                if self.turning_counter <= 7:
                     angle = self.angle_turning
                 else:
                     self.turning_counter = self.TURNING_MAX_FRAMES
@@ -742,43 +776,51 @@ class Controller():
                           low_height=None, low_window=None, check_height=None, 
                           min_width=None, top_thresh=None):
         """
-        Detect intersection by checking lane width at multiple heights.
-        Uses hyperparameters by default, but allows override for testing.
+        Simplified intersection detection: Check if road is wide at a specific height.
+        Intersection = Wide road (> threshold) + Road visible ahead (header check)
         """
         # Use hyperparameters if not specified
         low_height = low_height if low_height is not None else self.INTERSECTION_LOW_HEIGHT
-        low_window = low_window if low_window is not None else self.INTERSECTION_CHECK_WINDOW
-        check_height = check_height if check_height is not None else self.INTERSECTION_CHECK_HEIGHT
         min_width = min_width if min_width is not None else self.INTERSECTION_MIN_WIDTH
-        top_thresh = top_thresh if top_thresh is not None else self.INTERSECTION_TOP_THRESH
+        check_height = check_height if check_height is not None else self.INTERSECTION_CHECK_HEIGHT
         
         if self.VERBOSE_LOGGING:
-            print(f"[detect_intersection] params: low_height={low_height}, window={low_window}, "
-                  f"check_height={check_height}, min_width={min_width}, top_thresh={top_thresh}")
+            print(f"[detect_intersection] Checking at height={low_height}, min_width={min_width}, header_height={check_height}")
         
-        for h in range(low_height, low_height + low_window):
-            arr = [x for x, y in enumerate(image[h, :]) if y[0] == 255]
-            if len(arr) > 0 and max(arr) - min(arr) > 50:
-                # Check upper band
-                lineRow = image[min(check_height, image.shape[0]-1), :]
-                arr2 = [x for x, y in enumerate(lineRow) if y[0] == 255]
-                # Dynamic top-center sum
-                _, _, sum_top = self._compute_region_sums(image)
-                
-                if self.VERBOSE_LOGGING:
-                    low_width = (max(arr) - min(arr)) if len(arr) > 0 else 0
-                    up_width = (max(arr2) - min(arr2)) if len(arr2) > 0 else 0
-                    print(f"[detect_intersection] candidate at h={h}: low_width={low_width}, "
-                          f"up_width={up_width}, sum_top={sum_top}")
-
-                if len(arr2) > 0 and max(arr2) - min(arr2) > min_width and sum_top < top_thresh:
-                    if self.VERBOSE_LOGGING:
-                        print("[detect_intersection] Intersection confirmed!")
-                    return True
-
+        # Check road width at the specified height (near bottom)
+        h_idx = min(low_height, image.shape[0] - 1)
+        lineRow = image[h_idx, :]
+        road_pixels = [x for x, y in enumerate(lineRow) if y[0] == 255]
+        
+        if len(road_pixels) == 0:
+            if self.VERBOSE_LOGGING:
+                print("[detect_intersection] No road detected at check height")
+            return False
+        
+        road_width = max(road_pixels) - min(road_pixels)
+        
+        # Check for road ahead (header) - ensures we're approaching intersection, not just wide lane
+        header_row = image[min(check_height, image.shape[0] - 1), :]
+        header_pixels = [x for x, y in enumerate(header_row) if y[0] == 255]
+        has_header = len(header_pixels) > 0
+        
         if self.VERBOSE_LOGGING:
-            print("[detect_intersection] No intersection")
-        return False
+            print(f"[detect_intersection] road_width={road_width}, has_header={has_header} (header_pixels={len(header_pixels)})")
+        
+        # Simple logic: Wide road + Road visible ahead = Intersection
+        is_intersection = road_width > min_width and has_header
+        
+        if is_intersection:
+            if self.VERBOSE_LOGGING:
+                print(f"[detect_intersection] ✅ INTERSECTION! width={road_width} > {min_width}, header=yes")
+            return True
+        else:
+            if self.VERBOSE_LOGGING:
+                if road_width <= min_width:
+                    print(f"[detect_intersection] ❌ Road too narrow: {road_width} <= {min_width}")
+                else:
+                    print(f"[detect_intersection] ❌ No header (road ahead not visible)")
+            return False
 
     def calc_error(self, image):
         """
