@@ -131,19 +131,19 @@ if __name__ == "__main__":
                 # Default control
                 else:
                     error = controller.calc_error(segmented_image)
-                    angle = controller.PID(error, p=0.24,  i=0.012, d=0.12)
+                    angle = controller.PID(error, p=0.18,  i=0.0, d=0.15)
                     # AVControl(speed = speed, angle = -angle)
                     # Speed up after turning (in 35 frames)
                     if reset_counter >= 1 and reset_counter < 35:
-                        speed = 25
+                        speed = 30
                         reset_counter += 1
                     elif reset_counter == 35:
                         reset_counter = 0
-                        speed = 25
+                        speed = 30
                     else:
                         speed = controller.calc_speed(angle)
                         if float(config_control.current_speed) > 44.5:
-                            speed = 15
+                            speed = 30
 
                     print("Error:", error)
                     print("Angle:", angle)

@@ -13,7 +13,7 @@ class Controller():
     # ==================== HYPERPARAMETERS - TUNE THESE ====================
     
     # Signboard Collection
-    SAMPLES_REQUIRED = 20              # Number of samples to collect before confirming signboard
+    SAMPLES_REQUIRED = 19              # Number of samples to collect before confirming signboard
     EARLY_TRIGGER_SAMPLES = 10         # Minimum samples for early trigger if intersection detected
     LEFT_SIGN_BOOST = 3                # Multiplier for 'left' sign detection (boost importance)
     MIN_BBOX_AREA = 200                # Minimum bounding box area to accept detection (filter small/far signs)
@@ -168,8 +168,8 @@ class Controller():
         sum_right = np.sum(img[check_row_start:check_row_end, right_col_start:, 0])
         
         # Center (middle 40% of width)
-        center_col_start = int(w * 0.3)
-        center_col_end = int(w * 0.7)
+        center_col_start = int(w * 0.2)
+        center_col_end = int(w * 0.8)
         sum_top = np.sum(img[check_row_start:check_row_end, center_col_start:center_col_end, 0])
         
         # Debug logging
@@ -356,31 +356,24 @@ class Controller():
                 print("[_apply_signboard_decision] → STRAIGHT (0°, mask L+R)")
             
         elif self.majority_class == 'no right':
-            print(f"[DEBUG NO RIGHT] sum_left: {self.sum_left_corner}, sum_top: {self.sum_top_corner}")
-            print(f"[DEBUG NO RIGHT] LEFT_CORNER_THRESH: {self.LEFT_CORNER_THRESH}, TOP_CORNER_MID_THRESH: {self.TOP_CORNER_MID_THRESH}")
+            print(f"[DEBUG NO RIGHT] sum_left: {self.sum_left_corner}, sum_top: {self.sum_top_corner}, sum_right: {self.sum_right_corner}")
             
-            # Check if corner sums are valid (not all zeros)
-            if self.sum_left_corner == 0 and self.sum_top_corner == 0 and self.sum_right_corner == 0:
-                # Fallback: No road detected in corners, default to LEFT for "no right"
-                print("[DEBUG NO RIGHT] ⚠️ All corner sums are 0! Using fallback: TURN LEFT")
-                self.angle_turning = self.ANGLE_NO_RIGHT  # Turn left
-                self.is_no_turn_right_case_1 = True
-                if self.VERBOSE_LOGGING:
-                    print(f"[_apply_signboard_decision] → NO RIGHT (FALLBACK): Turn left ({self.ANGLE_NO_RIGHT}°)")
-            elif self.sum_left_corner > self.LEFT_CORNER_THRESH and self.sum_top_corner < self.TOP_CORNER_MID_THRESH:
-                # Normal case: left corner has road, top doesn't → turn left
-                self.angle_turning = self.ANGLE_NO_RIGHT
-                self.is_no_turn_right_case_1 = True
-                if self.VERBOSE_LOGGING:
-                    print(f"[_apply_signboard_decision] → NO RIGHT: Turn left ({self.ANGLE_NO_RIGHT}°)")
-            else:
-                # Go straight
+            # For "no right" sign: Default is to turn LEFT (since we can't go right)
+            # Only go straight if there's significantly more road ahead than on the left
+            if self.sum_top_corner > self.sum_left_corner * 2:
+                # Lots of road ahead, minimal on left → go straight
                 self.angle_turning = 0
                 self.mask_l = True
                 self.mask_r = True
                 self.is_no_turn_right_case_2 = True
                 if self.VERBOSE_LOGGING:
-                    print("[_apply_signboard_decision] → NO RIGHT: Go straight (mask L+R)")
+                    print(f"[_apply_signboard_decision] → NO RIGHT: Go straight (mask L+R) [top={self.sum_top_corner} > left*2={self.sum_left_corner*2}]")
+            else:
+                # Left has decent road or not much straight ahead → turn left
+                self.angle_turning = self.ANGLE_NO_RIGHT
+                self.is_no_turn_right_case_1 = True
+                if self.VERBOSE_LOGGING:
+                    print(f"[_apply_signboard_decision] → NO RIGHT: Turn left ({self.ANGLE_NO_RIGHT}°) [top={self.sum_top_corner} <= left*2={self.sum_left_corner*2}]")
             self.is_turning = True
             
         elif self.majority_class == 'stop':
@@ -905,7 +898,7 @@ class Controller():
         The speed of the car.
         """
         if abs(angle) < 10:
-            speed = 25
+            speed = 30
         elif 10 <= abs(angle) <= 20:
             speed = 1
         else:

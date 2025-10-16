@@ -214,4 +214,8 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
-*.pt
+# *.pt
+pretrain/enhanced_segmentation.pt
+pretrain/no_augment_detection.pt
+pretrain/signboard.pt
+pretrain/mainYoloModel.pt
